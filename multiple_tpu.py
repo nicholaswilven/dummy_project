@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 from torch import nn, optim
 from lightning.pytorch.callbacks import ModelCheckpoint
 import torch
+import os
 from typing import List, Optional, Tuple, Union
 
 WEIGHT_DECAY=0.01
@@ -148,7 +149,7 @@ class FoodModel(LightningModule):
 class FoodDataModule(LightningDataModule):
     def __init__(self, model_name: str = "xlm-roberta-base"):
         super().__init__()
-        concat_ds = load_dataset("awidjaja/512-food-dataset", split="train").take(2048)
+        concat_ds = load_dataset("awidjaja/512-food-dataset", split="train", token=os.getenv("ACCESS_TOKEN")).take(2048)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.dataset = tokenize(concat_ds, self.tokenizer)
         self.dataset.set_format("torch", columns=["input_ids", "attention_mask"])
