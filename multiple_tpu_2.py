@@ -113,7 +113,7 @@ class FoodDataModule(LightningDataModule):
 
 def _mp_fn(index, flags):
     data = FoodDataModule(model_name=BASE_MODEL_NAME)
-    data.setup()
+    data.setup(stage="fit")
     TOTAL_STEPS = EPOCH * len(data.train_dataloader())
     WARMUP_STEPS = int(0.1 * TOTAL_STEPS)
     model = FoodModel(model_name=BASE_MODEL_NAME, total_steps=TOTAL_STEPS, warmup_steps=WARMUP_STEPS)
