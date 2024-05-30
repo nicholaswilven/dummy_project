@@ -122,8 +122,8 @@ def main():
         precision='16-true'
         )
     trainer.fit(model, data)
-    m = FoodModel.load_from_checkpoint(checkpoint_callback.best_model_path)
-    m.model.push_to_hub(HUB_MODEL_NAME, use_auth_token = os.getenv("ACCESS_TOKEN"), private = True)
+    print("Best Model Checkpoint:",checkpoint_callback.best_model_path)
+    model.model.push_to_hub(HUB_MODEL_NAME, use_auth_token = os.getenv("ACCESS_TOKEN"), private = True)
     data.tokenizer.push_to_hub(HUB_MODEL_NAME, use_auth_token = os.getenv("ACCESS_TOKEN"), private = True)
 
 if __name__ == "__main__":
