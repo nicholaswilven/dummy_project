@@ -119,7 +119,7 @@ def _mp_fn(index, flags):
     model = FoodModel(model_name=BASE_MODEL_NAME, total_steps=TOTAL_STEPS, warmup_steps=WARMUP_STEPS)
     checkpoint_callback = ModelCheckpoint(monitor='val_loss')
     trainer = Trainer(
-        accelerator='xla',
+        accelerator='tpu',
         max_epochs=EPOCH,
         callbacks=[checkpoint_callback],
         accumulate_grad_batches=32,
