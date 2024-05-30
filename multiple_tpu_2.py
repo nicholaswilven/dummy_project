@@ -123,7 +123,7 @@ def _mp_fn(index, flags):
         max_epochs=EPOCH,
         callbacks=[checkpoint_callback],
         accumulate_grad_batches=32,
-        precision=16
+        precision="16-true"
     )
     trainer.fit(model, data)
     xm.rendezvous("download_only_once")
