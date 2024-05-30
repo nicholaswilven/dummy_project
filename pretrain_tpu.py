@@ -16,8 +16,8 @@ WEIGHT_DECAY=0.01
 LEARNING_RATE=5e-5
 MLM_PROB=0.15
 VAL_SIZE=0.05
-EPOCH=1
-DUPLICATE=1
+EPOCH=4
+DUPLICATE=5
 BATCH_SIZE=8
 HUB_MODEL_NAME="awidjaja/pretrained-xlmR-food"
 ACCELERATOR="tpu"
@@ -86,7 +86,7 @@ class FoodModel(LightningModule):
 class FoodDataModule(LightningDataModule):
     def __init__(self, model_name: str = "xlm-roberta-base"):
         super().__init__()
-        concat_ds = load_dataset("awidjaja/512-food-dataset", split="train").take(100)
+        concat_ds = load_dataset("awidjaja/512-food-dataset", split="train")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.dataset = tokenize(concat_ds, self.tokenizer)
         self.dataset.set_format("torch", columns=["input_ids", "attention_mask"])
@@ -118,7 +118,7 @@ def main():
         accelerator=ACCELERATOR,
         max_epochs=EPOCH,
         callbacks=[checkpoint_callback],
-        accumulate_grad_batches=16,
+        accumulate_grad_batches=32,
         precision='16-true'
         )
     trainer.fit(model, data)
