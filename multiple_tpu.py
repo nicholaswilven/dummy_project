@@ -161,4 +161,4 @@ def _mp_fn(index, flags):
 
 if __name__ == "__main__":
     FLAGS = {}
-    xmp.spawn(_mp_fn, args=(FLAGS,), nprocs=2, start_method='fork')
+    xmp.spawn(_mp_fn, args=(FLAGS,), nprocs=8, start_method='fork')
