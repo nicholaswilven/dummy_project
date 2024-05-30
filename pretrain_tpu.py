@@ -95,7 +95,6 @@ class FoodDataModule(LightningDataModule):
         self.train_dataset = self.dataset['train']
         self.val_dataset = self.dataset['test']
         self.train_dataset = concatenate_datasets([self.train_dataset]*DUPLICATE)
-        self.val_dataset = concatenate_datasets([self.val_dataset]*DUPLICATE)
         self.data_collator = DataCollatorForLanguageModeling(tokenizer=self.tokenizer, mlm=True, mlm_probability=MLM_PROB)
     
     def prepare_data(self):
@@ -105,10 +104,10 @@ class FoodDataModule(LightningDataModule):
         pass
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=BATCH_SIZE, collate_fn=self.data_collator, num_workers=NUM_WORKERS)
+        return DataLoader(self.train_dataset, batch_size=BATCH_SIZE, shuffle = True, collate_fn=self.data_collator, num_workers=NUM_WORKERS)
     
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=BATCH_SIZE, collate_fn=self.data_collator, num_workers=NUM_WORKERS)
+        return DataLoader(self.val_dataset, batch_size=BATCH_SIZE,  shuffle = False, collate_fn=self.data_collator, num_workers=NUM_WORKERS)
 
 def main():
     data = FoodDataModule(model_name=BASE_MODEL_NAME)
