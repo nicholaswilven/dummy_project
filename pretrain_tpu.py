@@ -16,8 +16,8 @@ WEIGHT_DECAY=0.01
 LEARNING_RATE=5e-5
 MLM_PROB=0.15
 VAL_SIZE=0.05
-EPOCH=4
-DUPLICATE=5
+EPOCH=1
+DUPLICATE=1
 BATCH_SIZE=8
 HUB_MODEL_NAME="awidjaja/pretrained-xlmR-food"
 ACCELERATOR="tpu"
@@ -122,7 +122,7 @@ def main():
         precision='16-true'
         )
     trainer.fit(model, data)
-    m = MLMModel.load_from_checkpoint(checkpoint_callback.best_model_path)
+    m = FoodModel.load_from_checkpoint(checkpoint_callback.best_model_path)
     m.model.push_to_hub(HUB_MODEL_NAME)
     data.tokenizer.push_to_hub(HUB_MODEL_NAME)
 
