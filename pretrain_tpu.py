@@ -13,10 +13,10 @@ import torch_xla.core.xla_model as xm
 import gc
 
 WEIGHT_DECAY=0.01
-LEARNING_RATE=5e-5
+LEARNING_RATE=1e-5
 MLM_PROB=0.15
 VAL_SIZE=0.05
-EPOCH=1
+EPOCH=4
 DUPLICATE=8
 BATCH_SIZE=8
 HUB_MODEL_NAME="awidjaja/pretrained-xlmR-food"
@@ -92,7 +92,7 @@ class FoodDataModule(LightningDataModule):
         self.dataset = tokenize(concat_ds, self.tokenizer)
         self.dataset.set_format("torch", columns=["input_ids", "attention_mask"])
         self.dataset = self.dataset.train_test_split(test_size=VAL_SIZE)
-        self.train_dataset = self.dataset['train'].take(2652928)
+        self.train_dataset = self.dataset['train']
         self.val_dataset = self.dataset['test']
         self.train_dataset = concatenate_datasets([self.train_dataset]*DUPLICATE)
         self.data_collator = DataCollatorForLanguageModeling(tokenizer=self.tokenizer, mlm=True, mlm_probability=MLM_PROB)
@@ -104,7 +104,7 @@ class FoodDataModule(LightningDataModule):
         pass
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=BATCH_SIZE, shuffle = False, collate_fn=self.data_collator, num_workers=NUM_WORKERS)
+        return DataLoader(self.train_dataset, batch_size=BATCH_SIZE, shuffle = True, collate_fn=self.data_collator, num_workers=NUM_WORKERS)
     
     def val_dataloader(self):
         return DataLoader(self.val_dataset, batch_size=BATCH_SIZE,  shuffle = False, collate_fn=self.data_collator, num_workers=NUM_WORKERS)
