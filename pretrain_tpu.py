@@ -19,8 +19,8 @@ WEIGHT_DECAY=0.01
 LEARNING_RATE=5e-5
 MLM_PROB=0.15
 VAL_SIZE=0.05
-EPOCH=3
-DUPLICATE=10
+EPOCH=4
+DUPLICATE=7
 BATCH_SIZE=8
 HUB_MODEL_NAME="awidjaja/pretrained-xlmR-food"
 ACCELERATOR="tpu"
@@ -137,17 +137,20 @@ def main():
     data = FoodDataModule(model_name=BASE_MODEL_NAME)
     TOTAL_STEPS = EPOCH*len(data.train_dataloader())
     WARMUP_STEPS = int(0.1*TOTAL_STEPS)
-    model = FoodModel(model_name=BASE_MODEL_NAME, total_steps = TOTAL_STEPS, warmup_steps = WARMUP_STEPS)
-    checkpoint_callback = ModelCheckpoint(monitor='val_loss')
+    model = FoodModel(model_name = BASE_MODEL_NAME, total_steps = TOTAL_STEPS, warmup_steps = WARMUP_STEPS)
+    checkpoint_callback = ModelCheckpoint(
+        monitor = 'val_loss',
+        save_top_k = 4
+    )
     trainer = Trainer(
-        accelerator=ACCELERATOR,
-        max_epochs=EPOCH,
-        callbacks=[checkpoint_callback],
-        accumulate_grad_batches=32,
-        # precision='16-true'
-        )
+        accelerator = ACCELERATOR,
+        max_epochs = EPOCH,
+        callbacks = [checkpoint_callback],
+        accumulate_grad_batches = 32,
+        precision = '16-true'
+    )
     trainer.fit(model, data)
-    print("Best Model Checkpoint:",checkpoint_callback.best_model_path)
+    print("Best Model Checkpoint:", checkpoint_callback.best_model_path)
     model.model.push_to_hub(HUB_MODEL_NAME, use_auth_token = os.getenv("ACCESS_TOKEN"), private = True)
     data.tokenizer.push_to_hub(HUB_MODEL_NAME, use_auth_token = os.getenv("ACCESS_TOKEN"), private = True)
 
