@@ -12,6 +12,9 @@ import os
 import torch_xla.core.xla_model as xm
 import gc
 
+from huggingface_hub import login
+login(os.getenv("ACCESS_TOKEN"))
+
 WEIGHT_DECAY=0.01
 LEARNING_RATE=1e-5
 MLM_PROB=0.15
