@@ -25,7 +25,7 @@ BATCH_SIZE=8
 HUB_MODEL_NAME="awidjaja/pretrained-xlmR-food"
 ACCELERATOR="tpu"
 BASE_MODEL_NAME="xlm-roberta-base"
-NUM_WORKERS=128
+NUM_WORKERS=64
 
 def tokenize(dataset, tokenizer):
     def batch_tokenize(batch):
@@ -56,15 +56,6 @@ class FoodModel(LightningModule):
         outputs = self.model(**batch)
         loss = outputs.loss
 
-        # Calculate accuracy
-        predictions = torch.argmax(outputs.logits, dim=-1)
-        labels = batch['labels']
-        mask = labels != -100
-        correct = (predictions[mask] == labels[mask]).sum().item()
-        total = mask.sum().item()
-        accuracy = correct / total if total > 0 else 0
-
-        self.log("train_accuracy", accuracy, on_epoch=True, on_step=True)
         self.log("train_loss", loss, on_epoch=True, on_step=True)
         return loss
 
