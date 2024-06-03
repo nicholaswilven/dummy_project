@@ -16,11 +16,11 @@ from huggingface_hub import login
 login(os.getenv("ACCESS_TOKEN"))
 
 WEIGHT_DECAY=0.01
-LEARNING_RATE=1e-5
+LEARNING_RATE=5e-5
 MLM_PROB=0.15
 VAL_SIZE=0.05
-EPOCH=4
-DUPLICATE=8
+EPOCH=3
+DUPLICATE=10
 BATCH_SIZE=8
 HUB_MODEL_NAME="awidjaja/pretrained-xlmR-food"
 ACCELERATOR="tpu"
@@ -55,12 +55,32 @@ class FoodModel(LightningModule):
     def training_step(self, batch, batch_idx):
         outputs = self.model(**batch)
         loss = outputs.loss
+
+        # Calculate accuracy
+        predictions = torch.argmax(outputs.logits, dim=-1)
+        labels = batch['labels']
+        mask = labels != -100
+        correct = (predictions[mask] == labels[mask]).sum().item()
+        total = mask.sum().item()
+        accuracy = correct / total if total > 0 else 0
+
+        self.log("train_accuracy", accuracy, on_epoch=True, on_step=True)
         self.log("train_loss", loss, on_epoch=True, on_step=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         outputs = self.model(**batch)
         loss = outputs.loss
+
+        # Calculate accuracy
+        predictions = torch.argmax(outputs.logits, dim=-1)
+        labels = batch['labels']
+        mask = labels != -100
+        correct = (predictions[mask] == labels[mask]).sum().item()
+        total = mask.sum().item()
+        accuracy = correct / total if total > 0 else 0
+
+        self.log("val_accuracy", accuracy, on_epoch=True, on_step=True)
         self.log("val_loss", loss, on_epoch=True, on_step=True)
         return loss
 
@@ -90,14 +110,15 @@ class FoodModel(LightningModule):
 class FoodDataModule(LightningDataModule):
     def __init__(self, model_name: str = "xlm-roberta-base"):
         super().__init__()
-        concat_ds = load_dataset("awidjaja/512-food-dataset", split="train")
+        concat_ds = load_dataset("awidjaja/512-food-dataset", split = "train")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.dataset = tokenize(concat_ds, self.tokenizer)
-        self.dataset.set_format("torch", columns=["input_ids", "attention_mask"])
-        self.dataset = self.dataset.train_test_split(test_size=VAL_SIZE)
-        self.train_dataset = self.dataset['train']
-        self.val_dataset = self.dataset['test']
+        self.dataset.set_format("torch", columns = ["input_ids", "attention_mask"])
+        self.dataset = self.dataset.train_test_split(test_size=VAL_SIZE, seed = 42)
+        self.train_dataset = self.dataset['train'].shuffle(seed = 42)
+        self.val_dataset = self.dataset['test'].shuffle(seed = 42)
         self.train_dataset = concatenate_datasets([self.train_dataset]*DUPLICATE)
+        self.val_dataset = concatenate_datasets([self.val_dataset]*DUPLICATE)
         self.data_collator = DataCollatorForLanguageModeling(tokenizer=self.tokenizer, mlm=True, mlm_probability=MLM_PROB)
     
     def prepare_data(self):
@@ -123,7 +144,7 @@ def main():
         max_epochs=EPOCH,
         callbacks=[checkpoint_callback],
         accumulate_grad_batches=32,
-        precision='16-true'
+        # precision='16-true'
         )
     trainer.fit(model, data)
     print("Best Model Checkpoint:",checkpoint_callback.best_model_path)
