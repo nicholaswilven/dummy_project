@@ -25,7 +25,7 @@ BATCH_SIZE=8
 HUB_MODEL_NAME="awidjaja/pretrained-xlmR-food"
 ACCELERATOR="tpu"
 BASE_MODEL_NAME="xlm-roberta-base"
-NUM_WORKERS=32
+NUM_WORKERS=128
 
 def tokenize(dataset, tokenizer):
     def batch_tokenize(batch):
