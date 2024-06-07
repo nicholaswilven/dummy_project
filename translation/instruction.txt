@@ -110,6 +110,6 @@ python run_clm.py \
   --peft_lora \
   --push_to_hub \
   --push_to_hub_model_id komodo-7b-translate-p1 \
-  --token <YOUR_TOKEN> \
-  --push_to_hub_token <YOUR_TOKEN>
+  --token <> \
+  --push_to_hub_token <>
 '
