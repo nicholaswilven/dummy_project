@@ -20,7 +20,7 @@ Here is the full list of checkpoints on the hub that can be fine-tuned by this s
 https://huggingface.co/models?filter=text-generation
 """
 # You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
-
+import random
 import logging
 import math
 import os
@@ -465,16 +465,36 @@ def main():
         column_names = list(raw_datasets["validation"].features)
     text_column_name = "text"
 
+    if data_args.block_size is None:
+        block_size = tokenizer.model_max_length
+        if block_size > max_pos_embeddings:
+            logger.warning(
+                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
+                f"Using block_size={min(1024, max_pos_embeddings)} instead. You can change that default value by passing --block_size xxx."
+            )
+            if max_pos_embeddings > 0:
+                block_size = min(1024, max_pos_embeddings)
+            else:
+                block_size = 1024
+    else:
+        if data_args.block_size > tokenizer.model_max_length:
+            logger.warning(
+                f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model "
+                f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
+            )
+        block_size = min(data_args.block_size, tokenizer.model_max_length)
+    
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
     def prompting_template(examples):
         # Concatenate all texts.
         # columns : ['source_lang','target_lang','source_text','target_text']
-        prompt = []
+        prompt_list = []
         for source_lang, target_lang, source_text, target_text in zip(examples['source_lang'],examples['target_lang'],examples['source_text'],examples['target_text']):
         #    prompt.append(f"""<s> [INST] Translate the following text from {source_lang.replace('_',' ').title()} to {target_lang.replace('_',' ').title()}:
         #        {source_text} [/INST]
         #        {target_text} </s>""")
-            prompt.append(f"""Di bawah ini adalah instruksi yang menjelaskan tugas, dipasangkan dengan masukan yang memberikan konteks lebih lanjut. Tulis respons yang secara tepat melengkapi permintaan.
+            if random.random() < 0.5:
+                prompt = f"""Di bawah ini adalah instruksi yang menjelaskan tugas, dipasangkan dengan masukan yang memberikan konteks lebih lanjut. Tulis respons yang secara tepat melengkapi permintaan.
 
 ### Instruksi:
 Terjemahkan teks berikut dari bahasa {source_lang.replace('_',' ').title()} ke bahasa {target_lang.replace('_',' ').title()}.
@@ -483,8 +503,45 @@ Terjemahkan teks berikut dari bahasa {source_lang.replace('_',' ').title()} ke b
 {source_text}
 
 ### Respon:
-{target_text} </s>""")
-            
+{target_text} </s>"""
+            else:
+                prompt = f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
+
+### Instruction:
+Translate the input text from {source_lang.replace('_',' ').title()} to {target_lang.replace('_',' ').title()}.
+
+### Input:
+{source_text}
+
+### Response:
+{target_text} </s>"""
+            if len(tokenizer(prompt).input_ids) <= block_size:
+                prompt_list.append(prompt)
+            if source_lang != 'english' and target_lang !='english' and data_args.do_flip: #If translations doesnt involve english, flip the pair
+                if random.random() < 0.5:
+                    prompt = f"""Di bawah ini adalah instruksi yang menjelaskan tugas, dipasangkan dengan masukan yang memberikan konteks lebih lanjut. Tulis respons yang secara tepat melengkapi permintaan.
+
+### Instruksi:
+Terjemahkan teks berikut dari bahasa {target_lang.replace('_',' ').title()} ke bahasa {source_lang.replace('_',' ').title()}.
+
+### Masukan:
+{target_text}
+
+### Respon:
+{source_text} </s>"""
+                else:
+                    prompt = f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
+
+### Instruction:
+Translate the input text from {target_lang.replace('_',' ').title()} to {source_lang.replace('_',' ').title()}.
+
+### Input:
+{target_text}
+
+### Response:
+{source_text} </s>"""
+                if len(tokenizer(prompt).input_ids) <= block_size:
+                    prompt_list.append(prompt)
         return {text_column_name : prompt}
 
     if not data_args.streaming:
@@ -507,24 +564,7 @@ Terjemahkan teks berikut dari bahasa {source_lang.replace('_',' ').title()} ke b
     # since this will be pickled to avoid _LazyModule error in Hasher force logger loading before tokenize_function
     tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_utils_base")
 
-    if data_args.block_size is None:
-        block_size = tokenizer.model_max_length
-        if block_size > max_pos_embeddings:
-            logger.warning(
-                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                f"Using block_size={min(1024, max_pos_embeddings)} instead. You can change that default value by passing --block_size xxx."
-            )
-            if max_pos_embeddings > 0:
-                block_size = min(1024, max_pos_embeddings)
-            else:
-                block_size = 1024
-    else:
-        if data_args.block_size > tokenizer.model_max_length:
-            logger.warning(
-                f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model "
-                f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
-            )
-        block_size = min(data_args.block_size, tokenizer.model_max_length)
+    
     
     def tokenize_function(examples):
         with CaptureLogger(tok_logger) as cl:
