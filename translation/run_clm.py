@@ -204,9 +204,7 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Optional input sequence length after tokenization. "
-                "The training dataset will be truncated in block of this size for training. "
-                "Default to the model max input length for single sentence inputs (take into account special tokens)."
+                "Max length padding for model"
             )
         },
     )
@@ -465,43 +463,49 @@ def main():
         column_names = list(raw_datasets["train"].features)
     else:
         column_names = list(raw_datasets["validation"].features)
-    text_column_name = "text" if "text" in column_names else column_names[0]
+    text_column_name = "text"
 
+    # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
+    def prompting_template(examples):
+        # Concatenate all texts.
+        # columns : ['source_lang','target_lang','source_text','target_text']
+        prompt = []
+        for source_lang, target_lang, source_text, target_text in zip(examples['source_lang'],examples['target_lang'],examples['source_text'],examples['target_text']):
+        #    prompt.append(f"""<s> [INST] Translate the following text from {source_lang.replace('_',' ').title()} to {target_lang.replace('_',' ').title()}:
+        #        {source_text} [/INST]
+        #        {target_text} </s>""")
+            prompt.append(f"""Di bawah ini adalah instruksi yang menjelaskan tugas, dipasangkan dengan masukan yang memberikan konteks lebih lanjut. Tulis respons yang secara tepat melengkapi permintaan.
+
+### Instruksi:
+Terjemahkan teks berikut dari bahasa {source_lang.replace('_',' ').title()} ke bahasa {target_lang.replace('_',' ').title()}.
+
+### Masukan:
+{source_text}
+
+### Respon:
+{target_text} </s>""")
+            
+        return {text_column_name : prompt}
+
+    if not data_args.streaming:
+        templated_datasets = raw_datasets.map(
+            prompting_template,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not data_args.overwrite_cache,
+            desc="Fitting Dataset to Prompt Template for Translation",
+        )
+    else:
+        templated_datasets = raw_datasets.map(
+            prompting_template,
+            batched=True,
+            remove_columns=column_names,
+        )
+            
+    
     # since this will be pickled to avoid _LazyModule error in Hasher force logger loading before tokenize_function
     tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_utils_base")
-
-    def tokenize_function(examples):
-        with CaptureLogger(tok_logger) as cl:
-            output = tokenizer(examples[text_column_name])
-        # clm input could be much much longer than block_size
-        if "Token indices sequence length is longer than the" in cl.out:
-            tok_logger.warning(
-                "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits"
-                " before being passed to the model."
-            )
-        return output
-
-    with training_args.main_process_first(desc="dataset map tokenization"):
-        if not data_args.streaming:
-            tokenized_datasets = raw_datasets.map(
-                tokenize_function,
-                batched=True,
-                num_proc=data_args.preprocessing_num_workers,
-                remove_columns=column_names,
-                load_from_cache_file=not data_args.overwrite_cache,
-                desc="Running tokenizer on dataset",
-            )
-        else:
-            tokenized_datasets = raw_datasets.map(
-                tokenize_function,
-                batched=True,
-                remove_columns=column_names,
-            )
-    if hasattr(config, "max_position_embeddings"):
-        max_pos_embeddings = config.max_position_embeddings
-    else:
-        # Define a default value if the attribute is missing in the config.
-        max_pos_embeddings = 1024
 
     if data_args.block_size is None:
         block_size = tokenizer.model_max_length
@@ -521,44 +525,48 @@ def main():
                 f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
             )
         block_size = min(data_args.block_size, tokenizer.model_max_length)
+    
+    def tokenize_function(examples):
+        with CaptureLogger(tok_logger) as cl:
+            output = tokenizer(
+                examples[text_column_name],
+                max_length=block_size,
+                padding="max_length",
+                truncation=True,
+                return_tensors="np"
+                )
+        # clm input could be much much longer than block_size
+        if "Token indices sequence length is longer than the" in cl.out:
+            tok_logger.warning(
+                "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits"
+                " before being passed to the model."
+            )
+        output['labels'] = output['input_ids'].copy()
+        return output
 
-    # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
-    def group_texts(examples):
-        # Concatenate all texts.
-        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
-        total_length = len(concatenated_examples[list(examples.keys())[0]])
-        # We drop the small remainder, and if the total_length < block_size  we exclude this batch and return an empty dict.
-        # We could add padding if the model supported it instead of this drop, you can customize this part to your needs.
-        total_length = (total_length // block_size) * block_size
-        # Split by chunks of max_len.
-        result = {
-            k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
-            for k, t in concatenated_examples.items()
-        }
-        result["labels"] = result["input_ids"].copy()
-        return result
-
-    # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a remainder
-    # for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value might be slower
-    # to preprocess.
-    #
-    # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
-    # https://huggingface.co/docs/datasets/process#map
-
-    with training_args.main_process_first(desc="grouping texts together"):
+    with training_args.main_process_first(desc="dataset map tokenization"):
         if not data_args.streaming:
-            lm_datasets = tokenized_datasets.map(
-                group_texts,
+            tokenized_datasets = templated_datasets.map(
+                tokenize_function,
                 batched=True,
                 num_proc=data_args.preprocessing_num_workers,
+                remove_columns=column_names,
                 load_from_cache_file=not data_args.overwrite_cache,
-                desc=f"Grouping texts in chunks of {block_size}",
+                desc="Running tokenizer on dataset",
             )
         else:
-            lm_datasets = tokenized_datasets.map(
-                group_texts,
+            tokenized_datasets = templated_datasets.map(
+                tokenize_function,
                 batched=True,
+                remove_columns=column_names,
             )
+    if hasattr(config, "max_position_embeddings"):
+        max_pos_embeddings = config.max_position_embeddings
+    else:
+        # Define a default value if the attribute is missing in the config.
+        max_pos_embeddings = 1024
+
+    lm_datasets = tokenized_datasets
 
     if training_args.do_train:
         if "train" not in tokenized_datasets:
