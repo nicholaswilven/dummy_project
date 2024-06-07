@@ -200,6 +200,7 @@ class DataTrainingArguments:
         },
     )
     streaming: bool = field(default=False, metadata={"help": "Enable streaming mode"})
+    do_flip: bool = field(default=False, metadata={"help": "Enable flipping trasslations at data"})
     block_size: Optional[int] = field(
         default=None,
         metadata={
