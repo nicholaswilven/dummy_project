@@ -1,0 +1,111 @@
+# Download dataset
+wget https://object.pouta.csc.fi/Tatoeba-Challenge-v2023-09-26/eng-msa.tar
+wget https://object.pouta.csc.fi/Tatoeba-Challenge-v2023-09-26/ban-msa.tar
+wget https://object.pouta.csc.fi/Tatoeba-Challenge-v2023-09-26/msa-msa.tar
+wget https://object.pouta.csc.fi/Tatoeba-Challenge-v2023-09-26/eng-jav.tar
+wget https://object.pouta.csc.fi/Tatoeba-Challenge-v2023-09-26/eng-sun.tar
+wget https://object.pouta.csc.fi/Tatoeba-Challenge-v2023-09-26/jav-msa.tar
+
+tar -xvf eng-msa.tar
+gzip -d data/release/v2023-09-26/eng-msa/train.id.gz
+gzip -d data/release/v2023-09-26/eng-msa/train.src.gz
+gzip -d data/release/v2023-09-26/eng-msa/train.trg.gz
+
+tar -xvf ban-msa.tar
+gzip -d data/release/v2023-09-26/ban-msa/train.id.gz
+gzip -d data/release/v2023-09-26/ban-msa/train.src.gz
+gzip -d data/release/v2023-09-26/ban-msa/train.trg.gz
+
+tar -xvf eng-jav.tar
+gzip -d data/release/v2023-09-26/eng-jav/train.id.gz
+gzip -d data/release/v2023-09-26/eng-jav/train.src.gz
+gzip -d data/release/v2023-09-26/eng-jav/train.trg.gz
+
+tar -xvf eng-sun.tar
+gzip -d data/release/v2023-09-26/eng-sun/train.id.gz
+gzip -d data/release/v2023-09-26/eng-sun/train.src.gz
+gzip -d data/release/v2023-09-26/eng-sun/train.trg.gz
+
+tar -xvf jav-msa.tar
+gzip -d data/release/v2023-09-26/jav-msa/train.id.gz
+gzip -d data/release/v2023-09-26/jav-msa/train.src.gz
+gzip -d data/release/v2023-09-26/jav-msa/train.trg.gz
+
+tar -xvf msa-msa.tar
+gzip -d data/release/v2023-09-26/msa-msa/train.id.gz
+gzip -d data/release/v2023-09-26/msa-msa/train.src.gz
+gzip -d data/release/v2023-09-26/msa-msa/train.trg.gz
+
+git clone https://github.com/IndoNLP/nusax.git
+
+# TPU VM config
+export PROJECT_ID= 
+export PROJECT_ID= 
+export TPU_NAME=
+export ZONE=us-central2-b
+export RUNTIME_VERSION=tpu-ubuntu2204-base
+export ACCELERATOR_TYPE=v4-64
+
+# Install all libraries to all TPU VM workers
+gcloud compute tpus tpu-vm ssh ${TPU_NAME} \
+  --zone=${ZONE} \
+  --project=${PROJECT_ID} \
+  --worker=all --command="
+pip install torch~=2.3.0 torch_xla[tpu]~=2.3.0 torchvision -f https://storage.googleapis.com/libtpu-releases/index.html
+
+git clone -b llama2-google-next-training https://github.com/pytorch-tpu/transformers.git
+cd transformers
+sudo pip3 install -e . --user
+pip3 install datasets accelerate evaluate scikit-learn peft
+'
+
+# Move training script to all TPU VM workers
+gcloud compute tpus tpu-vm scp translation/run_clm.py $TPU_NAME:~/run_clm.py --worker all --project $PROJECT_ID --zone=$ZONE
+
+# Finetune komodo-7b
+gcloud alpha compute tpus tpu-vm ssh ${TPU_NAME} \
+--zone ${ZONE} \
+--project ${PROJECT_ID} \
+--worker=all \
+--command='
+# Setup envs
+export PJRT_DEVICE=TPU
+export XLA_USE_BF16=1
+export XLA_IR_DEBUG=1
+export XLA_HLO_DEBUG=1
+
+export PROFILE_EPOCH=0
+export PROFILE_STEP=3
+export PROFILE_DURATION_MS=20000
+export PROFILE_LOGDIR=/tmp/home/
+
+# Run
+python run_clm.py \
+  --model_name_or_path jan-hq/komodo-7b-chat \
+  --dataset_name wikitext \
+  --dataset_config_name wikitext-2-raw-v1 \
+  --per_device_train_batch_size 128 \
+  --per_device_eval_batch_size 8 \
+  --num_train_epochs 10 \
+  --do_train \
+  --output_dir /tmp/output \
+  --overwrite_output_dir \
+  --save_strategy no \
+  --logging_strategy steps \
+  --logging_steps 500 \
+  --evaluation_strategy epoch \
+  --remove_unused_columns no \
+  --optim adafactor \
+  --warmup_ratio 0.05 \
+  --lr_scheduler_type cosine \
+  --torch_dtype bfloat16 \
+  --learning_rate 5e-5 \
+  --weight_decay 0.001 \
+  --dataloader_drop_last yes \
+  --block_size 2048 \
+  --spmd_2d_sharding 1 \
+  --peft_lora \
+  --push_to_hub \
+  --push_to_hub_model_id komodo-7b-test \
+  --push_to_hub_token <YOUR_TOKEN>
+'
