@@ -83,7 +83,7 @@ export PROFILE_LOGDIR=/tmp/home/
 python run_clm.py \
   --model_name_or_path Yellow-AI-NLP/komodo-7b-base \
   --trust_remote_code \
-  --dataset_name thonyyy/tatoeba-nusax-mt \
+  --dataset_name thonyyy/tatoeba-nusax-mt-p1 \
   --per_device_train_batch_size 64 \
   --per_device_eval_batch_size 8 \
   --num_train_epochs 10 \
@@ -91,7 +91,7 @@ python run_clm.py \
   --preprocessing_num_workers 512 \
   --output_dir /tmp/output \
   --overwrite_output_dir \
-  --save_strategy no \
+  --save_strategy epoch \
   --logging_strategy steps \
   --logging_steps 500 \
   --evaluation_strategy epoch \
