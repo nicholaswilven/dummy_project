@@ -92,6 +92,7 @@ python run_clm.py \
   --output_dir /tmp/output \
   --overwrite_output_dir \
   --save_strategy epoch \
+  --save_total_limit 1 \
   --logging_strategy steps \
   --logging_steps 500 \
   --evaluation_strategy epoch \
@@ -108,6 +109,6 @@ python run_clm.py \
   --peft_lora \
   --push_to_hub \
   --push_to_hub_model_id komodo-7b-translate-p1 \
-  --token <YOUR_TOKEN>
+  --token <YOUR_TOKEN> \
   --push_to_hub_token <YOUR_TOKEN>
 '
