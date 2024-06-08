@@ -772,11 +772,7 @@ Translate the input text from {target_lang.replace('_',' ').title()} to {source_
     def tokenize_function(examples):
         with CaptureLogger(tok_logger) as cl:
             output = tokenizer(
-                examples[text_column_name],
-                max_length=block_size,
-                padding="max_length",
-                truncation=True,
-                return_tensors="np"
+                examples[text_column_name]
                 )
         # clm input could be much much longer than block_size
         if "Token indices sequence length is longer than the" in cl.out:
