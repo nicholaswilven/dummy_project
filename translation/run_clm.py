@@ -500,7 +500,7 @@ def main():
             "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
-
+    tokenizer.add_special_tokens({'pad_token': '<pad>'})
     import torch_xla.core.xla_model as xm
     import torch_xla.experimental.xla_sharding as xs
 
@@ -745,7 +745,10 @@ Translate the input text from {source_lang.replace('_',' ').title()} to {target_
     def tokenize_function(examples):
         with CaptureLogger(tok_logger) as cl:
             output = tokenizer(
-                examples[text_column_name]
+                examples[text_column_name],
+                max_length=block_size,
+                padding="max_length",
+                truncation=True
                 )
         # clm input could be much much longer than block_size
         if "Token indices sequence length is longer than the" in cl.out:
