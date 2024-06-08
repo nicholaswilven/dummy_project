@@ -691,9 +691,8 @@ def main():
     def prompting_template(examples):
         # Concatenate all texts.
         # columns : ['source_lang','target_lang','source_text','target_text']
-        # prompt_list = []
-        if 1:
-            source_lang, target_lang, source_text, target_text = examples['source_lang'],examples['target_lang'],examples['source_text'],examples['target_text']
+        prompt_list = []
+        for source_lang, target_lang, source_text, target_text in zip(examples['source_lang'],examples['target_lang'],examples['source_text'],examples['target_text']):
             if random.random() < 0.5:
                 prompt = f"""Di bawah ini adalah instruksi yang menjelaskan tugas, dipasangkan dengan masukan yang memberikan konteks lebih lanjut. Tulis respons yang secara tepat melengkapi permintaan.
 
@@ -717,9 +716,10 @@ Translate the input text from {source_lang.replace('_',' ').title()} to {target_
 ### Response:
 {target_text} </s>"""
             if len(tokenizer(prompt).input_ids) <= block_size:
-                return {text_column_name : prompt}
-            else:
-                return {}
+                prompt_list.append(prompt)
+                
+        return {text_column_name : prompt}
+            
 
     if not data_args.streaming:
         templated_datasets = raw_datasets.map(
