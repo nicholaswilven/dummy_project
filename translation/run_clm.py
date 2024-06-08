@@ -715,8 +715,7 @@ Translate the input text from {source_lang.replace('_',' ').title()} to {target_
 
 ### Response:
 {target_text} </s>"""
-            if len(tokenizer(prompt).input_ids) <= block_size:
-                prompt_list.append(prompt)
+            prompt_list.append(prompt)
                 
         return {text_column_name : prompt_list}
             
@@ -741,7 +740,7 @@ Translate the input text from {source_lang.replace('_',' ').title()} to {target_
     # since this will be pickled to avoid _LazyModule error in Hasher force logger loading before tokenize_function
     tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_utils_base")
 
-    
+    templated_datasets = templated_datasets.filter(lambda x: len(tokenizer(x[text_column_name]).input_ids) <block_size)
     
     def tokenize_function(examples):
         with CaptureLogger(tok_logger) as cl:
