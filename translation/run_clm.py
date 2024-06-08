@@ -718,7 +718,7 @@ Translate the input text from {source_lang.replace('_',' ').title()} to {target_
             if len(tokenizer(prompt).input_ids) <= block_size:
                 prompt_list.append(prompt)
                 
-        return {text_column_name : prompt}
+        return {text_column_name : prompt_list}
             
 
     if not data_args.streaming:
