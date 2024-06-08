@@ -763,7 +763,7 @@ Translate the input text from {source_lang.replace('_',' ').title()} to {target_
                 tokenize_function,
                 batched=True,
                 num_proc=data_args.preprocessing_num_workers,
-                remove_columns=column_names,
+                # remove_columns=column_names,
                 load_from_cache_file=not data_args.overwrite_cache,
                 desc="Running tokenizer on dataset",
             )
@@ -771,7 +771,7 @@ Translate the input text from {source_lang.replace('_',' ').title()} to {target_
             tokenized_datasets = templated_datasets.map(
                 tokenize_function,
                 batched=True,
-                remove_columns=column_names,
+                # remove_columns=column_names,
             )
     if hasattr(config, "max_position_embeddings"):
         max_pos_embeddings = config.max_position_embeddings
