@@ -691,11 +691,9 @@ def main():
     def prompting_template(examples):
         # Concatenate all texts.
         # columns : ['source_lang','target_lang','source_text','target_text']
-        prompt_list = []
-        for source_lang, target_lang, source_text, target_text in zip(examples['source_lang'],examples['target_lang'],examples['source_text'],examples['target_text']):
-        #    prompt.append(f"""<s> [INST] Translate the following text from {source_lang.replace('_',' ').title()} to {target_lang.replace('_',' ').title()}:
-        #        {source_text} [/INST]
-        #        {target_text} </s>""")
+        # prompt_list = []
+        if 1:
+            source_lang, target_lang, source_text, target_text = examples['source_lang'],examples['target_lang'],examples['source_text'],examples['target_text']
             if random.random() < 0.5:
                 prompt = f"""Di bawah ini adalah instruksi yang menjelaskan tugas, dipasangkan dengan masukan yang memberikan konteks lebih lanjut. Tulis respons yang secara tepat melengkapi permintaan.
 
@@ -719,33 +717,9 @@ Translate the input text from {source_lang.replace('_',' ').title()} to {target_
 ### Response:
 {target_text} </s>"""
             if len(tokenizer(prompt).input_ids) <= block_size:
-                prompt_list.append(prompt)
-            if source_lang != 'english' and target_lang !='english' and data_args.do_flip: #If translations doesnt involve english, flip the pair
-                if random.random() < 0.5:
-                    prompt = f"""Di bawah ini adalah instruksi yang menjelaskan tugas, dipasangkan dengan masukan yang memberikan konteks lebih lanjut. Tulis respons yang secara tepat melengkapi permintaan.
-
-### Instruksi:
-Terjemahkan teks berikut dari bahasa {target_lang.replace('_',' ').title()} ke bahasa {source_lang.replace('_',' ').title()}.
-
-### Masukan:
-{target_text}
-
-### Respon:
-{source_text} </s>"""
-                else:
-                    prompt = f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
-
-### Instruction:
-Translate the input text from {target_lang.replace('_',' ').title()} to {source_lang.replace('_',' ').title()}.
-
-### Input:
-{target_text}
-
-### Response:
-{source_text} </s>"""
-                if len(tokenizer(prompt).input_ids) <= block_size:
-                    prompt_list.append(prompt)
-        return {text_column_name : prompt}
+                return {text_column_name : prompt}
+            else:
+                return {}
 
     if not data_args.streaming:
         templated_datasets = raw_datasets.map(
