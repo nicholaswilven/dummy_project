@@ -267,7 +267,6 @@ class DataTrainingArguments:
         },
     )
     streaming: bool = field(default=False, metadata={"help": "Enable streaming mode"})
-    do_flip: bool = field(default=False, metadata={"help": "Enable flipping trasslations at data"})
     block_size: Optional[int] = field(
         default=None,
         metadata={
@@ -698,8 +697,7 @@ def main():
         for source_lang, target_lang, source_text, target_text in zip(examples['source_lang'],examples['target_lang'],examples['source_text'],examples['target_text']):
             source_text = tokenizer.decode(tokenizer(source_text, add_special_tokens = False).input_ids[:(block_size-100)//2])
             target_text = tokenizer.decode(tokenizer(target_text, add_special_tokens = False).input_ids[:(block_size-100)//2])
-            if random.random() < 0.5:
-                prompt = f"""Di bawah ini adalah instruksi yang menjelaskan tugas, dipasangkan dengan masukan yang memberikan konteks lebih lanjut. Tulis respons yang secara tepat melengkapi permintaan.
+            prompt = f"""Di bawah ini adalah instruksi yang menjelaskan tugas, dipasangkan dengan masukan yang memberikan konteks lebih lanjut. Tulis respons yang secara tepat melengkapi permintaan.
 
 ### Instruksi:
 Terjemahkan teks berikut dari bahasa {source_lang.replace('_',' ').title()} ke bahasa {target_lang.replace('_',' ').title()}.
@@ -708,17 +706,6 @@ Terjemahkan teks berikut dari bahasa {source_lang.replace('_',' ').title()} ke b
 {source_text}
 
 ### Respon:
-{target_text} </s>"""
-            else:
-                prompt = f"""Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
-
-### Instruction:
-Translate the input text from {source_lang.replace('_',' ').title()} to {target_lang.replace('_',' ').title()}.
-
-### Input:
-{source_text}
-
-### Response:
 {target_text} </s>"""
             prompt_list.append(prompt)
                 
@@ -773,7 +760,6 @@ Translate the input text from {source_lang.replace('_',' ').title()} to {target_
                 load_from_cache_file=not data_args.overwrite_cache,
                 desc="Running tokenizer on dataset",
             )
-            tokenized_datasets.set_format("torch", columns = ["input_ids", "attention_mask","labels"])
         else:
             tokenized_datasets = templated_datasets.map(
                 tokenize_function,
