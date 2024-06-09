@@ -738,8 +738,7 @@ Terjemahkan teks berikut dari bahasa {source_lang.replace('_',' ').title()} ke b
                 examples[text_column_name],
                 max_length=block_size,
                 padding="max_length",
-                truncation=True,
-                return_tensors='pt'
+                truncation=True            
                 )
         # clm input could be much much longer than block_size
         if "Token indices sequence length is longer than the" in cl.out:
@@ -747,7 +746,7 @@ Terjemahkan teks berikut dari bahasa {source_lang.replace('_',' ').title()} ke b
                 "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits"
                 " before being passed to the model."
             )
-        output['labels'] = output['input_ids'].clone()
+        output['labels'] = [x.copy() for x in output['input_ids']]
         return output
 
     with training_args.main_process_first(desc="dataset map tokenization"):
