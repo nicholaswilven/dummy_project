@@ -18,7 +18,7 @@ WEIGHT_DECAY=0.001
 LEARNING_RATE=1e-5
 VAL_SIZE=0.05
 EPOCH=1
-BATCH_SIZE=8
+BATCH_SIZE=2
 
 block_size = 512
 HUB_MODEL_NAME="thonyyy/komodo-7b-translate-p1"
@@ -64,9 +64,12 @@ Terjemahkan teks berikut dari bahasa {source_lang.replace('_',' ').title()} ke b
     )
 
 class LargeLanguageModel(LightningModule):
-    def __init__(self, model_name: str = "", total_steps = 0, warmup_steps = 0):
+    def __init__(self, model_name: str = "", total_steps = 0, warmup_steps = 0, tokenizer = None):
         super().__init__()
         self.model = AutoModelForCausalLM.from_pretrained(model_name)
+        embedding_size = self.model.get_input_embeddings().weight.shape[0]
+        if len(tokenizer) > embedding_size:
+            self.model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of = 64)
         self.save_hyperparameters()
         self.total_steps = total_steps
         self.warmup_steps = warmup_steps
@@ -161,7 +164,7 @@ def main():
     data = LargeDataModule(model_name=BASE_MODEL_NAME)
     TOTAL_STEPS = 1000
     WARMUP_STEPS = int(0.1*TOTAL_STEPS)
-    model = LargeLanguageModel(model_name = BASE_MODEL_NAME, total_steps = TOTAL_STEPS, warmup_steps = WARMUP_STEPS)
+    model = LargeLanguageModel(model_name = BASE_MODEL_NAME, total_steps = TOTAL_STEPS, warmup_steps = WARMUP_STEPS, tokenizer = data.tokenizer)
     checkpoint_callback = ModelCheckpoint(
         monitor = 'val_loss',
     )
