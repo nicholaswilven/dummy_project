@@ -66,7 +66,7 @@ Terjemahkan teks berikut dari bahasa {source_lang.replace('_',' ').title()} ke b
 class LargeLanguageModel(LightningModule):
     def __init__(self, model_name: str = "", total_steps = 0, warmup_steps = 0, tokenizer = None):
         super().__init__()
-        self.model = AutoModelForCausalLM.from_pretrained(model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16)
         embedding_size = self.model.get_input_embeddings().weight.shape[0]
         if len(tokenizer) > embedding_size:
             self.model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of = 64)
