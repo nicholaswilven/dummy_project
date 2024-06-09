@@ -22,7 +22,7 @@ BATCH_SIZE=8
 
 block_size = 512
 HUB_MODEL_NAME="thonyyy/komodo-7b-translate-p1"
-DATASET_NAME="thonyyy/tatoeba-nusax-mt-p1-stream"
+DATASET_NAME="thonyyy/tatoeba-nusax-mt-p2"
 ACCELERATOR="tpu"
 BASE_MODEL_NAME="Yellow-AI-NLP/komodo-7b-base"
 NUM_WORKERS = 64
@@ -136,7 +136,7 @@ class LargeLanguageModel(LightningModule):
 class LargeDataModule(LightningDataModule):
     def __init__(self, model_name: str = ""):
         super().__init__()
-        concat_ds = load_dataset(DATASET_NAME, streaming=True)
+        concat_ds = load_dataset(DATASET_NAME)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.dataset = tokenize(concat_ds, self.tokenizer)
         self.dataset.set_format("torch", columns = ["input_ids", "attention_mask", "labels"])
