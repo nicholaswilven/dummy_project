@@ -138,6 +138,7 @@ class LargeDataModule(LightningDataModule):
         super().__init__()
         concat_ds = load_dataset(DATASET_NAME)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.tokenizer.add_special_tokens({'pad_token': '<pad>'})
         self.dataset = tokenize(concat_ds, self.tokenizer)
         self.dataset.set_format("torch", columns = ["input_ids", "attention_mask", "labels"])
         self.train_dataset = self.dataset['train']
