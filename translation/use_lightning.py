@@ -84,11 +84,13 @@ class LargeLanguageModel(LightningModule):
         lora_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
             inference_mode=False,
-            r=8,
+            r=16,
             lora_alpha=32,
             lora_dropout=0.1
         )
         self.model = get_peft_model(self.model, lora_config)
+        print("LoRA enabled")
+        self.model.print_trainable_parameters()
         
     def training_step(self, batch, batch_idx):
         outputs = self.model(**batch)

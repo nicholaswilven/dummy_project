@@ -657,7 +657,7 @@ def main():
     if model_args.peft_lora:
         from peft import LoraConfig, TaskType, get_peft_model
         # We don't set dropout here because dropout requires special xla flags to be memory efficient.
-        peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.0)
+        peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=16, lora_alpha=32, lora_dropout=0.0)
         model = get_peft_model(model, peft_config)
         print("LoRA enabled")
         model.print_trainable_parameters()
@@ -872,6 +872,8 @@ Terjemahkan teks berikut dari bahasa {source_lang.replace('_',' ').title()} ke b
 
     if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)
+        model.push_to_hub(**kwargs)
+        tokenizer.push_to_hub(**kwargs)
     else:
         trainer.create_model_card(**kwargs)
 
