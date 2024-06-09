@@ -1,7 +1,7 @@
 from lightning import LightningModule, LightningDataModule, Trainer
 from torch.optim.lr_scheduler import LambdaLR
-from datasets import load_dataset, concatenate_datasets
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from datasets import load_dataset
+from transformers import AutoTokenizer, AutoModelForCausalLM, default_data_collator
 from torch.utils.data import DataLoader
 from torch import nn, optim
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -149,7 +149,7 @@ class LargeDataModule(LightningDataModule):
         self.dataset = self.dataset['train'].train_test_split(test_size=VAL_SIZE, seed = 42)
         self.train_dataset = self.dataset['train'].shuffle(seed = 42)
         self.val_dataset = self.dataset['test'].shuffle(seed = 42)
-        
+        self.data_collator = default_data_collator
     def prepare_data(self):
         pass
 
