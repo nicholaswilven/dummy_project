@@ -18,7 +18,7 @@ WEIGHT_DECAY=0.001
 LEARNING_RATE=1e-5
 VAL_SIZE=0.05
 EPOCH=1
-BATCH_SIZE=2
+BATCH_SIZE=64
 
 block_size = 512
 HUB_MODEL_NAME="thonyyy/komodo-7b-translate-p1"
@@ -164,7 +164,7 @@ class LargeDataModule(LightningDataModule):
 
 def main():
     data = LargeDataModule(model_name=BASE_MODEL_NAME)
-    TOTAL_STEPS = 1000
+    TOTAL_STEPS = len(data.train_dataset)
     WARMUP_STEPS = int(0.1*TOTAL_STEPS)
     model = LargeLanguageModel(model_name = BASE_MODEL_NAME, total_steps = TOTAL_STEPS, warmup_steps = WARMUP_STEPS, tokenizer = data.tokenizer)
     checkpoint_callback = ModelCheckpoint(
@@ -174,7 +174,7 @@ def main():
         accelerator = ACCELERATOR,
         max_epochs = EPOCH,
         callbacks = [checkpoint_callback],
-        accumulate_grad_batches = 32,
+        # accumulate_grad_batches = 32,
         precision = '16-true'
     )
     trainer.fit(model, data)
