@@ -141,9 +141,10 @@ class LargeDataModule(LightningDataModule):
         self.tokenizer.add_special_tokens({'pad_token': '<pad>'})
         self.dataset = tokenize(concat_ds, self.tokenizer)
         self.dataset.set_format("torch", columns = ["input_ids", "attention_mask", "labels"])
-        self.train_dataset = self.dataset['train']
-        self.val_dataset = self.dataset['validation']
-    
+        self.dataset = self.dataset.train_test_split(test_size=VAL_SIZE, seed = 42)
+        self.train_dataset = self.dataset['train'].shuffle(seed = 42)
+        self.val_dataset = self.dataset['test'].shuffle(seed = 42)
+        
     def prepare_data(self):
         pass
 
