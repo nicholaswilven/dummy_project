@@ -136,7 +136,7 @@ class LargeLanguageModel(LightningModule):
 class LargeDataModule(LightningDataModule):
     def __init__(self, model_name: str = ""):
         super().__init__()
-        concat_ds = load_dataset(DATASET_NAME, split = "train")
+        concat_ds = load_dataset(DATASET_NAME, streaming=True)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.dataset = tokenize(concat_ds, self.tokenizer)
         self.dataset.set_format("torch", columns = ["input_ids", "attention_mask", "labels"])
