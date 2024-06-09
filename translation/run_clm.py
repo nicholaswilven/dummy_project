@@ -751,7 +751,8 @@ Translate the input text from {source_lang.replace('_',' ').title()} to {target_
                 examples[text_column_name],
                 max_length=block_size,
                 padding="max_length",
-                truncation=True
+                truncation=True,
+                return_tensors='pt'
                 )
         # clm input could be much much longer than block_size
         if "Token indices sequence length is longer than the" in cl.out:
@@ -759,7 +760,7 @@ Translate the input text from {source_lang.replace('_',' ').title()} to {target_
                 "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits"
                 " before being passed to the model."
             )
-        output['labels'] = output['input_ids'].copy()
+        output['labels'] = output['input_ids'].clone()
         return output
 
     with training_args.main_process_first(desc="dataset map tokenization"):
@@ -772,6 +773,7 @@ Translate the input text from {source_lang.replace('_',' ').title()} to {target_
                 load_from_cache_file=not data_args.overwrite_cache,
                 desc="Running tokenizer on dataset",
             )
+            tokenized_datasets.set_format("torch", columns = ["input_ids", "attention_mask","labels"])
         else:
             tokenized_datasets = templated_datasets.map(
                 tokenize_function,
