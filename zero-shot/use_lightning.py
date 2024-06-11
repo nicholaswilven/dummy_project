@@ -4,9 +4,7 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from torch.utils.data import Dataset, DataLoader, random_split, default_collate
 from torch import nn, optim
 from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.loggers import WandbLogger
 import torch
-import torch_xla.core.xla_model as xm
 import os
 
 from huggingface_hub import login
@@ -125,9 +123,11 @@ class NLIData(LightningDataModule):
         return DataLoader(self.val_dataset, batch_size = BATCH_SIZE, collate_fn = collator, num_workers = NUM_WORKERS)
 
 if __name__ == "__main__":
+    import torch_xla.core.xla_model as xm
     local_rank = xm.get_ordinal()
     wandb_logger = None
-    if local_rank == 0:        
+    if local_rank == 0:
+        from lightning.pytorch.loggers import WandbLogger
         wandb_logger = WandbLogger(
         log_model="all",
         mode="online",
