@@ -123,26 +123,24 @@ class NLIData(LightningDataModule):
         return DataLoader(self.val_dataset, batch_size = BATCH_SIZE, collate_fn = collator, num_workers = NUM_WORKERS)
 
 if __name__ == "__main__":
-    local_rank = 0 if "local_rank_0.txt" in os.listdir() else -1
-    wandb_logger = None
-    if local_rank == 0:
-        from lightning.pytorch.loggers import WandbLogger
-        wandb_logger = WandbLogger(
-        log_model="all",
-        mode="online",
-        project="madral-recommendation",
-        group="madral-recommendation-group",
-        config={
-            "learning_rate": LEARNING_RATE,
-            "weight_decay": WEIGHT_DECAY,
-            "epochs": EPOCH,
-            "batch_size": BATCH_SIZE,
-            "block_size": block_size,
-            "base_model_name": BASE_MODEL_NAME,
-            "hub_model_name": HUB_MODEL_NAME,
-            "dataset_name": DATASET_NAME
-            }
-        )
+    from lightning.pytorch.loggers import WandbLogger
+    wandb_logger = WandbLogger(
+    log_model="all",
+    mode="online",
+    id="experimental",
+    project="madral-recommendation",
+    group="madral-recommendation-group",
+    config={
+        "learning_rate": LEARNING_RATE,
+        "weight_decay": WEIGHT_DECAY,
+        "epochs": EPOCH,
+        "batch_size": BATCH_SIZE,
+        "block_size": block_size,
+        "base_model_name": BASE_MODEL_NAME,
+        "hub_model_name": HUB_MODEL_NAME,
+        "dataset_name": DATASET_NAME
+        }
+    )
     label_index = {
         "contradiction": 0,
         "neutral": 1,
@@ -153,6 +151,8 @@ if __name__ == "__main__":
     checkpoint_callback = ModelCheckpoint(monitor = 'val_loss')
     trainer = Trainer(accelerator = ACCELERATOR, max_epochs = EPOCH, callbacks =  [checkpoint_callback], logger=wandb_logger)
     trainer.fit(model, data)
+    
+    local_rank = 0 if "lightning_logs" in os.listdir() else -1
     if local_rank == 0:   
         print("Saving model to hub: ")
         model = Model.load_from_checkpoint(checkpoint_callback.best_model_path)
