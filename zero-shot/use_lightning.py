@@ -123,8 +123,7 @@ class NLIData(LightningDataModule):
         return DataLoader(self.val_dataset, batch_size = BATCH_SIZE, collate_fn = collator, num_workers = NUM_WORKERS)
 
 if __name__ == "__main__":
-    import torch_xla.core.xla_model as xm
-    local_rank = xm.get_ordinal()
+    local_rank = 0 if "local_rank_0.txt" in os.listdir() else -1
     wandb_logger = None
     if local_rank == 0:
         from lightning.pytorch.loggers import WandbLogger
