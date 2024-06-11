@@ -24,21 +24,6 @@ ACCELERATOR="tpu"
 BASE_MODEL_NAME="awidjaja/pretrained-xlmR-food"
 NUM_WORKERS = 64
 
-wandb_logger = WandbLogger(
-    log_model="all",
-    project="madral-recommendation",
-    config={
-        "learning_rate": LEARNING_RATE,
-        "weight_decay": WEIGHT_DECAY,
-        "epochs": EPOCH,
-        "batch_size": BATCH_SIZE,
-        "block_size": block_size,
-        "base_model_name": BASE_MODEL_NAME,
-        "hub_model_name": HUB_MODEL_NAME,
-        "dataset_name": DATASET_NAME
-    }
-)
-
 def collator(batch):
     keys = batch[0].keys()
     new_batch = {}
@@ -139,7 +124,22 @@ class NLIData(LightningDataModule):
     def val_dataloader(self):
         return DataLoader(self.val_dataset, batch_size = BATCH_SIZE, collate_fn = collator, num_workers = NUM_WORKERS)
 
-def main():
+if __name__ == "__main__":
+    wandb_logger = WandbLogger(
+    log_model="all",
+    project="madral-recommendation",
+    group="madral-recommendation-group",
+    config={
+        "learning_rate": LEARNING_RATE,
+        "weight_decay": WEIGHT_DECAY,
+        "epochs": EPOCH,
+        "batch_size": BATCH_SIZE,
+        "block_size": block_size,
+        "base_model_name": BASE_MODEL_NAME,
+        "hub_model_name": HUB_MODEL_NAME,
+        "dataset_name": DATASET_NAME
+        }
+    )
     label_index = {
         "contradiction": 0,
         "neutral": 1,
@@ -151,9 +151,9 @@ def main():
     trainer = Trainer(accelerator = ACCELERATOR, max_epochs = EPOCH, callbacks =  [checkpoint_callback], logger=wandb_logger)
     trainer.fit(model, data)
     print("Best model saved to:", checkpoint_callback.best_model_path)
-    # m = Model.load_from_checkpoint(checkpoint_callback.best_model_path)
+    try:
+        model = Model.load_from_checkpoint(checkpoint_callback.best_model_path)
+    except:
+        print("Best model saved to:", checkpoint_callback.best_model_path)
     model.model.push_to_hub(HUB_MODEL_NAME, private = True)
     data.tokenizer.push_to_hub(HUB_MODEL_NAME, private = True)
-
-if __name__ == "__main__":
-    main()
