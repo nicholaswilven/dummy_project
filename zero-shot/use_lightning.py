@@ -124,13 +124,7 @@ class NLIData(LightningDataModule):
 
 if __name__ == "__main__":
     from lightning.pytorch.loggers import WandbLogger
-    wandb_logger = WandbLogger(
-    log_model="all",
-    mode="online",
-    id="experimental",
-    project="madral-recommendation",
-    group="madral-recommendation-group",
-    config={
+    conf = {
         "learning_rate": LEARNING_RATE,
         "weight_decay": WEIGHT_DECAY,
         "epochs": EPOCH,
@@ -140,6 +134,13 @@ if __name__ == "__main__":
         "hub_model_name": HUB_MODEL_NAME,
         "dataset_name": DATASET_NAME
         }
+    wandb_logger = WandbLogger(
+    log_model="all",
+    # mode="online",
+    # id="experimental",
+    # project="madral-recommendation",
+    # group="madral-recommendation-group",
+    # config= conf
     )
     label_index = {
         "contradiction": 0,
