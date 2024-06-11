@@ -63,7 +63,7 @@ def tokenize(dataset, tokenizer):
 
     return dataset.map(
         batch_tokenize,
-        NUM_WORKERS = 16,
+        num_proc = NUM_WORKERS,
         batched = True,
         remove_columns = ["task", "hypothesis", "premise"],
     )
