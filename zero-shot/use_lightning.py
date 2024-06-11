@@ -145,8 +145,8 @@ def main():
         "neutral": 1,
         "entailment": 2
         }
-    model = Model(model_name = os.getenv("BASE_MODEL_NAME"), label_index = label_index)
-    data = NLIData(model_name = os.getenv("BASE_MODEL_NAME"), label_index = label_index)
+    model = Model(model_name = BASE_MODEL_NAME, label_index = label_index)
+    data = NLIData(model_name = BASE_MODEL_NAME, label_index = label_index)
     checkpoint_callback = ModelCheckpoint(monitor = 'val_loss')
     trainer = Trainer(accelerator = ACCELERATOR, max_epochs = EPOCH, callbacks =  [checkpoint_callback], logger=wandb_logger)
     trainer.fit(model, data)
