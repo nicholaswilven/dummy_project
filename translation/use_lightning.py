@@ -15,7 +15,7 @@ from huggingface_hub import login
 login(os.getenv("ACCESS_TOKEN"))
 
 WEIGHT_DECAY=0.001
-LEARNING_RATE=1e-5
+LEARNING_RATE=4e-4
 VAL_SIZE=0.05
 EPOCH=1
 BATCH_SIZE=64
