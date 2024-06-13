@@ -23,6 +23,7 @@ EPOCH=3
 WEIGHT_DECAY=0.01
 VAL_SIZE=0.05
 LEARNING_RATE=0.00001
+block_size = 256
 BASE_MODEL_NAME="awidjaja/pretrained-xlmR-food"
 EN_DATASET="carant-ai/english_sentiment_dataset"
 ID_DATASET="carant-ai/indonesian_sentiment_dataset"
@@ -44,7 +45,7 @@ def tokenize(dataset, tokenizer, label_index):
     def batch_tokenize(batch):
         token = tokenizer(
             batch["text"],
-            max_length = 512,
+            max_length = block_size,
             padding = "max_length",
             truncation = True,
             return_tensors = "pt",
@@ -167,7 +168,7 @@ def main():
             "weight_decay": WEIGHT_DECAY,
             "epochs": EPOCH,
             "batch_size": BATCH_SIZE,
-            "block_size": 512,
+            "block_size": block_size,
             "base_model_name": BASE_MODEL_NAME,
             "hub_model_name": HUB_MODEL_NAME,
             "dataset_name": ID_DATASET +","+EN_DATASET
