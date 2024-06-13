@@ -1,4 +1,4 @@
-from lightning import LightningModule, LightningDataModule, Trainer
+from lightning import LightningModule, LightningDataModule, Trainer, pytorch
 from datasets import load_dataset, concatenate_datasets
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from torch.utils.data import Dataset, DataLoader, random_split, default_collate
@@ -123,25 +123,6 @@ class NLIData(LightningDataModule):
         return DataLoader(self.val_dataset, batch_size = BATCH_SIZE, collate_fn = collator, num_workers = NUM_WORKERS)
 
 if __name__ == "__main__":
-    from lightning.pytorch.loggers import WandbLogger
-    conf = {
-        "learning_rate": LEARNING_RATE,
-        "weight_decay": WEIGHT_DECAY,
-        "epochs": EPOCH,
-        "batch_size": BATCH_SIZE,
-        "block_size": block_size,
-        "base_model_name": BASE_MODEL_NAME,
-        "hub_model_name": HUB_MODEL_NAME,
-        "dataset_name": DATASET_NAME
-        }
-    wandb_logger = WandbLogger(
-    log_model="all",
-    # mode="online",
-    # id="experimental",
-    # project="madral-recommendation",
-    # group="madral-recommendation-group",
-    # config= conf
-    )
     label_index = {
         "contradiction": 0,
         "neutral": 1,
@@ -150,7 +131,26 @@ if __name__ == "__main__":
     model = Model(model_name = BASE_MODEL_NAME, label_index = label_index)
     data = NLIData(model_name = BASE_MODEL_NAME, label_index = label_index)
     checkpoint_callback = ModelCheckpoint(monitor = 'val_loss')
-    trainer = Trainer(accelerator = ACCELERATOR, max_epochs = EPOCH, callbacks =  [checkpoint_callback], logger=wandb_logger)
+    trainer = Trainer(
+        accelerator = ACCELERATOR,
+        max_epochs = EPOCH,
+        callbacks =  [checkpoint_callback],
+        logger = pytorch.loggers.WandbLogger(
+            log_model = "all",
+            mode = "online",
+            project = "madral-recommendation",
+            config = {
+                "learning_rate": LEARNING_RATE,
+                "weight_decay": WEIGHT_DECAY,
+                "epochs": EPOCH,
+                "batch_size": BATCH_SIZE,
+                "block_size": block_size,
+                "base_model_name": BASE_MODEL_NAME,
+                "hub_model_name": HUB_MODEL_NAME,
+                "dataset_name": DATASET_NAME
+                }
+            )
+        )
     trainer.fit(model, data)
     
     local_rank = 0 if "lightning_logs" in os.listdir() else -1
