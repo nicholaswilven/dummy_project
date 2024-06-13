@@ -4,7 +4,6 @@ from datasets import load_dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.utils.data import DataLoader, IterableDataset
 from torch import nn, optim
-from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 import torch
 import os
@@ -71,7 +70,7 @@ class LargeLanguageModel(LightningModule):
             target_modules = ["q_proj", "k_proj", "v_proj", "o_proj","gate_proj", "up_proj", "down_proj",],
             inference_mode=False,
             r=32,
-            lora_alpha=32,
+            lora_alpha=16,
             lora_dropout=0.1
         )
         self.model = get_peft_model(self.model, lora_config)
@@ -146,13 +145,10 @@ def main():
     TOTAL_STEPS = MAX_TRAIN_BATCHES_PER_EPOCH * EPOCH
     WARMUP_STEPS = int(0.1 * TOTAL_STEPS)
     model = LargeLanguageModel(model_name=BASE_MODEL_NAME, total_steps=TOTAL_STEPS, warmup_steps=WARMUP_STEPS, tokenizer=data.tokenizer)
-    checkpoint_callback = ModelCheckpoint(
-        monitor='val_loss',
-    )
     wandblogger = WandbLogger(
         log_model = True,
         mode = "online",
-        project = "qwen-for-translation-1",
+        project = "qwen2-for-translation-p1",
         config = {
             "learning_rate": LEARNING_RATE,
             "weight_decay": WEIGHT_DECAY,
@@ -169,17 +165,12 @@ def main():
         accelerator = ACCELERATOR,
         devices = "auto",
         max_steps = TOTAL_STEPS,
-        callbacks =  [checkpoint_callback],
         logger = wandblogger,
         precision = 'bf16-true'
     )
     trainer.fit(model, data)
-    local_rank = 0 if "lightning_logs" in os.listdir() else -1
-    if local_rank == 0:   
-        print("Saving model to hub: ")
-        model = LargeLanguageModel.load_from_checkpoint(checkpoint_callback.best_model_path)
-        model.model.push_to_hub(HUB_MODEL_NAME, private = True)
-        data.tokenizer.push_to_hub(HUB_MODEL_NAME, private = True)
+    model.model.push_to_hub(HUB_MODEL_NAME, private = True)
+    data.tokenizer.push_to_hub(HUB_MODEL_NAME, private = True)
         
     wandb.finish()
 

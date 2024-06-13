@@ -4,7 +4,6 @@ from datasets import load_dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.utils.data import DataLoader
 from torch import nn, optim
-from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 import torch
 import os
@@ -148,9 +147,6 @@ def main():
     TOTAL_STEPS = len(data.train_dataset)
     WARMUP_STEPS = int(0.1*TOTAL_STEPS)
     model = LargeLanguageModel(model_name = BASE_MODEL_NAME, total_steps = TOTAL_STEPS, warmup_steps = WARMUP_STEPS, tokenizer = data.tokenizer)
-    checkpoint_callback = ModelCheckpoint(
-        monitor = 'val_loss',
-    )
     wandblogger = WandbLogger(
         log_model = True,
         mode = "online",
@@ -171,7 +167,6 @@ def main():
         accelerator = ACCELERATOR,
         devices = "auto",
         max_epochs = EPOCH,
-        callbacks =  [checkpoint_callback],
         logger = wandblogger,
         precision = 'bf16-true'
     )
