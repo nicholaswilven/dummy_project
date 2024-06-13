@@ -1,10 +1,11 @@
 from lightning import LightningModule, LightningDataModule, Trainer
 from torch.optim.lr_scheduler import LambdaLR
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, default_data_collator
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.utils.data import DataLoader
 from torch import nn, optim
 from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.loggers import WandbLogger
 import torch
 import os
 import wandb
@@ -13,12 +14,12 @@ from huggingface_hub import login
 login(os.getenv("ACCESS_TOKEN"))
 
 WEIGHT_DECAY=0.001
-LEARNING_RATE=4e-4
+LEARNING_RATE=1e-5
 VAL_SIZE=0.05
-EPOCH=1
-BATCH_SIZE=16
+EPOCH=3
+BATCH_SIZE = 16
+block_size = 256
 
-block_size = 512
 HUB_MODEL_NAME="thonyyy/qwen2-7b-instruct-translate-p1"
 DATASET_NAME="thonyyy/tatoeba-nusax-mt-p2"
 ACCELERATOR="tpu"
@@ -56,8 +57,9 @@ class LargeLanguageModel(LightningModule):
 
         lora_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
+            target_modules = ["q_proj", "k_proj", "v_proj", "o_proj","gate_proj", "up_proj", "down_proj",],
             inference_mode=False,
-            r=16,
+            r=32,
             lora_alpha=32,
             lora_dropout=0.1
         )
@@ -134,20 +136,38 @@ def main():
     checkpoint_callback = ModelCheckpoint(
         monitor = 'val_loss',
     )
-    from lightning.pytorch.loggers import WandbLogger
-    wandb_logger = WandbLogger(log_model="all")
+    wandblogger = WandbLogger(
+        log_model = True,
+        mode = "online",
+        project = "qwen-for-translation-1",
+        config = {
+            "learning_rate": LEARNING_RATE,
+            "weight_decay": WEIGHT_DECAY,
+            "epochs": EPOCH,
+            "batch_size": BATCH_SIZE,
+            "block_size": block_size,
+            "base_model_name": BASE_MODEL_NAME,
+            "hub_model_name": HUB_MODEL_NAME,
+            "dataset_name": DATASET_NAME
+            }
+        )
+    wandblogger.experiment
     trainer = Trainer(
         accelerator = ACCELERATOR,
+        devices = "auto",
         max_epochs = EPOCH,
-        callbacks = [checkpoint_callback],
-        logger=wandb_logger, 
-        # accumulate_grad_batches = 32,
+        callbacks =  [checkpoint_callback],
+        logger = wandblogger,
         precision = 'bf16'
     )
     trainer.fit(model, data)
-    print("Best Model Checkpoint:", checkpoint_callback.best_model_path)
-    model.model.push_to_hub(HUB_MODEL_NAME, private = True)
-    data.tokenizer.push_to_hub(HUB_MODEL_NAME, private = True)
+    local_rank = 0 if "lightning_logs" in os.listdir() else -1
+    if local_rank == 0:   
+        print("Saving model to hub: ")
+        model = LargeLanguageModel.load_from_checkpoint(checkpoint_callback.best_model_path)
+        model.model.push_to_hub(HUB_MODEL_NAME, private = True)
+        data.tokenizer.push_to_hub(HUB_MODEL_NAME, private = True)
+        
     wandb.finish()
     
 if __name__ == "__main__":
