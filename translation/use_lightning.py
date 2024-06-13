@@ -6,10 +6,8 @@ from torch.utils.data import DataLoader
 from torch import nn, optim
 from lightning.pytorch.callbacks import ModelCheckpoint
 import torch
-from typing import List, Optional, Tuple, Union
 import os
-import torch_xla.core.xla_model as xm
-import gc
+import wandb
 
 from huggingface_hub import login
 login(os.getenv("ACCESS_TOKEN"))
@@ -136,17 +134,21 @@ def main():
     checkpoint_callback = ModelCheckpoint(
         monitor = 'val_loss',
     )
+    from lightning.pytorch.loggers import WandbLogger
+    wandb_logger = WandbLogger(log_model="all")
     trainer = Trainer(
         accelerator = ACCELERATOR,
         max_epochs = EPOCH,
         callbacks = [checkpoint_callback],
+        logger=wandb_logger, 
         # accumulate_grad_batches = 32,
         precision = '16-true'
     )
     trainer.fit(model, data)
     print("Best Model Checkpoint:", checkpoint_callback.best_model_path)
-    model.model.push_to_hub(HUB_MODEL_NAME, use_auth_token = os.getenv("ACCESS_TOKEN"), private = True)
-    data.tokenizer.push_to_hub(HUB_MODEL_NAME, use_auth_token = os.getenv("ACCESS_TOKEN"), private = True)
-
+    model.model.push_to_hub(HUB_MODEL_NAME, private = True)
+    data.tokenizer.push_to_hub(HUB_MODEL_NAME, private = True)
+    wandb.finish()
+    
 if __name__ == "__main__":
     main()

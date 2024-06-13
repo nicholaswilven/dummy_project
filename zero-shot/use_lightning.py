@@ -12,7 +12,7 @@ login(os.getenv("ACCESS_TOKEN"))
 
 WEIGHT_DECAY=0.01
 LEARNING_RATE=5e-6
-EPOCH=3
+EPOCH=2
 BATCH_SIZE=64
 
 block_size = 512
