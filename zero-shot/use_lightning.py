@@ -1,8 +1,9 @@
-from lightning import LightningModule, LightningDataModule, Trainer, pytorch
+from lightning import LightningModule, LightningDataModule, Trainer
 from datasets import load_dataset, concatenate_datasets
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from torch.utils.data import Dataset, DataLoader, random_split, default_collate
 from torch import nn, optim
+from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
 import torch
 import os
@@ -131,26 +132,28 @@ if __name__ == "__main__":
     model = Model(model_name = BASE_MODEL_NAME, label_index = label_index)
     data = NLIData(model_name = BASE_MODEL_NAME, label_index = label_index)
     checkpoint_callback = ModelCheckpoint(monitor = 'val_loss')
+    wandblogger = WandbLogger(
+        log_model = True,
+        mode = "online",
+        project = "madral-recommendation",
+        config = {
+            "learning_rate": LEARNING_RATE,
+            "weight_decay": WEIGHT_DECAY,
+            "epochs": EPOCH,
+            "batch_size": BATCH_SIZE,
+            "block_size": block_size,
+            "base_model_name": BASE_MODEL_NAME,
+            "hub_model_name": HUB_MODEL_NAME,
+            "dataset_name": DATASET_NAME
+            }
+        )
+    wandblogger.experiment
     trainer = Trainer(
         accelerator = ACCELERATOR,
         devices = "auto",
         max_epochs = EPOCH,
         callbacks =  [checkpoint_callback],
-        logger = pytorch.loggers.WandbLogger(
-            log_model = True,
-            mode = "online",
-            project = "madral-recommendation",
-            config = {
-                "learning_rate": LEARNING_RATE,
-                "weight_decay": WEIGHT_DECAY,
-                "epochs": EPOCH,
-                "batch_size": BATCH_SIZE,
-                "block_size": block_size,
-                "base_model_name": BASE_MODEL_NAME,
-                "hub_model_name": HUB_MODEL_NAME,
-                "dataset_name": DATASET_NAME
-                }
-            )
+        logger = wandblogger
         )
     trainer.fit(model, data)
     
