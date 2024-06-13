@@ -26,19 +26,24 @@ ACCELERATOR="tpu"
 BASE_MODEL_NAME="Qwen/Qwen2-7B-Instruct"
 NUM_WORKERS = 32
 
-def formatting_prompts_func(examples, tokenizer):
+def formatting_prompts_func(dataset, tokenizer):
     EOS_TOKEN = tokenizer.eos_token # Must add EOS_TOKEN
     alpaca_prompt = "Below is an instruction that describes a task. Write a response that appropriately completes the request. \n\n### Instruction:\n{}\n\n### Response:\n{}"
     # Concatenate all texts.
     # columns : ['source_lang','target_lang','source_text','target_text']
-    prompt_list = []
-    for source_lang, target_lang, source_text, target_text in zip(examples['source_lang'],examples['target_lang'],examples['source_text'],examples['target_text']):
-        source_text = tokenizer.decode(tokenizer(source_text, add_special_tokens = False).input_ids[:(block_size-80)//2])
-        target_text = tokenizer.decode(tokenizer(target_text, add_special_tokens = False).input_ids[:(block_size-80)//2])
-        instruction = f"Translate the input text from {source_lang.replace('_',' ').title()} to {target_lang.replace('_',' ').title()}."
-        prompt = alpaca_prompt.format(instruction+'\n'+source_text.replace('\n',''), target_text.replace('\n','')) + EOS_TOKEN
-        prompt_list.append(prompt)
-    return {"text": prompt_list}
+    def _map_func(examples):
+        prompt_list = []
+        for source_lang, target_lang, source_text, target_text in zip(examples['source_lang'],examples['target_lang'],examples['source_text'],examples['target_text']):
+            source_text = tokenizer.decode(tokenizer(source_text, add_special_tokens = False).input_ids[:(block_size-80)//2])
+            target_text = tokenizer.decode(tokenizer(target_text, add_special_tokens = False).input_ids[:(block_size-80)//2])
+            instruction = f"Translate the input text from {source_lang.replace('_',' ').title()} to {target_lang.replace('_',' ').title()}."
+            prompt = alpaca_prompt.format(instruction+'\n'+source_text.replace('\n',''), target_text.replace('\n','')) + EOS_TOKEN
+            prompt_list.append(prompt)
+        return {"text": prompt_list}
+    return dataset.map(_map_func,
+                       batched = True,
+                       num_proc = NUM_WORKERS
+                       )
 
 class LargeLanguageModel(LightningModule):
     def __init__(self, model_name: str = "", total_steps = 0, warmup_steps = 0, tokenizer = None):
