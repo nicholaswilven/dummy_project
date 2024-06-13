@@ -41,7 +41,15 @@ class StreamingIterableDataset(IterableDataset):
             target_text = self.tokenizer.decode(self.tokenizer(example['target_text'], add_special_tokens=False).input_ids[:(block_size-80)//2])
             instruction = f"Translate the input text from {source_lang.replace('_',' ').title()} to {target_lang.replace('_',' ').title()}."
             prompt = self.alpaca_prompt.format(instruction+'\n'+source_text.replace('\n',''), target_text.replace('\n','')) + self.EOS_TOKEN
-            yield {"text": prompt}
+            
+            outputs = self.tokenizer(
+                prompt,
+                max_length = block_size,
+                padding = "max_length",
+                truncation = True,
+                return_tensors = "pt",
+            )
+            yield outputs
 
 class LargeLanguageModel(LightningModule):
     def __init__(self, model_name: str = "", total_steps = 0, warmup_steps = 0, tokenizer = None):

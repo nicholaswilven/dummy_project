@@ -39,10 +39,19 @@ def formatting_prompts_func(dataset, tokenizer):
             instruction = f"Translate the input text from {source_lang.replace('_',' ').title()} to {target_lang.replace('_',' ').title()}."
             prompt = alpaca_prompt.format(instruction+'\n'+source_text.replace('\n',''), target_text.replace('\n','')) + EOS_TOKEN
             prompt_list.append(prompt)
-        return {"text": prompt_list}
+        outputs = tokenizer(
+            prompt_list,
+            max_length = block_size,
+            padding = "max_length",
+            truncation = True,
+            return_tensors = "pt",
+        )
+        return outputs
+    remove_cols = dataset.column_names
     return dataset.map(_map_func,
                        batched = True,
-                       num_proc = NUM_WORKERS
+                       num_proc = NUM_WORKERS,
+                       remove_columns = remove_cols
                        )
 
 class LargeLanguageModel(LightningModule):
