@@ -3,25 +3,19 @@ from datasets import load_dataset, concatenate_datasets
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from torch.utils.data import Dataset, DataLoader, random_split, default_collate
 from torch import nn, optim
-from lightning.pytorch.loggers import WandbLogger
-import wandb
 from lightning.pytorch.callbacks import ModelCheckpoint
 import torch
+from lightning.pytorch.loggers import WandbLogger
+import wandb
+
 import os
+import dotenv
+if '.env' in os.listdir():
+    dotenv.load_dotenv('~/sentiment/.env')
 
 from huggingface_hub import login
 login(os.getenv("ACCESS_TOKEN"))
 
-WEIGHT_DECAY=0.01
-LEARNING_RATE=1e-5
-EPOCH=2
-BATCH_SIZE=128
-VAL_SIZE=0.05
-block_size = 512
-HUB_MODEL_NAME="awidjaja/zero-shot-xlmR-food"
-DATASET_NAME="awidjaja/compiled_nli"
-ACCELERATOR="tpu"
-BASE_MODEL_NAME="awidjaja/pretrained-xlmR-food"
 NUM_WORKERS = 64
 
 def collator(batch):
@@ -34,23 +28,24 @@ def collator(batch):
             new_batch[key] = torch.cat([(example[key].view(1, -1)) for example in batch], dim = 0)
     return new_batch, labels
 
-def tokenize(dataset, tokenizer):
+def tokenize(dataset, tokenizer, label_index):
     def batch_tokenize(batch):
         token = tokenizer(
-            batch["premise"],
-            batch["hypothesis"],
-            max_length = block_size,
+            batch["text"],
+            max_length = 512,
             padding = "max_length",
-            truncation = "only_first",
+            truncation = True,
             return_tensors = "pt",
         )
+
+        token["labels"] = [label_index[label] for label in batch["label_text"]]
         return token
 
     return dataset.map(
         batch_tokenize,
         num_proc = NUM_WORKERS,
         batched = True,
-        remove_columns = ["hypothesis", "premise"],
+        remove_columns = ["text", "label_text", "source", "split"],
     )
 
 class Model(LightningModule):
@@ -86,6 +81,7 @@ class Model(LightningModule):
         return loss
 
     def configure_optimizers(self):
+        weight_decay = 0.01
         param_optimizer = list(self.named_parameters())
 
         # Remove LayerNorm from weight decay params
@@ -93,25 +89,31 @@ class Model(LightningModule):
         optimizer_grouped_parameters = [
             {
                 "params": [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)],
-                "weight_decay": WEIGHT_DECAY,
+                "weight_decay": weight_decay,
             },
             {"params": [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
         ]
 
-        optimizer = optim.AdamW(optimizer_grouped_parameters, lr=LEARNING_RATE)
+        optimizer = optim.AdamW(optimizer_grouped_parameters, lr=float(os.getenv("LEARNING_RATE")))
         return optimizer
 
 
-class NLIData(LightningDataModule):
-    def __init__(self, model_name: str = "xlm-roberta-base", label_index = {}):
+class Sentence(LightningDataModule):
+    def __init__(self, model_name: str = "xlm-roberta-base", val_ratio = 0.05, label_index = {}):
         super().__init__()
-        dataset = load_dataset(DATASET_NAME, split = "train")
+        id_dataset = load_dataset(
+            os.getenv("ID_DATASET"), split = "train",
+        )
+        en_dataset = load_dataset(
+            os.getenv("EN_DATASET"), split = "train",
+        )
+        concat_ds = concatenate_datasets([id_dataset, en_dataset]).shuffle(seed=42)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        dataset = tokenize(dataset, self.tokenizer)
+        dataset = tokenize(concat_ds, self.tokenizer, label_index)
         dataset.set_format("torch", columns=["input_ids", "attention_mask", "labels"])
-        self.dataset = dataset.train_test_split(test_size=VAL_SIZE, seed = 42)
-        self.train_dataset = self.dataset['train'].shuffle(seed = 42)
-        self.val_dataset = self.dataset['test'].shuffle(seed = 42)
+        dataset = dataset.train_test_split(test_size = val_ratio)
+        self.train_dataset = dataset['train']
+        self.val_dataset = dataset['test']
     
     def prepare_data(self):
         pass
@@ -120,49 +122,42 @@ class NLIData(LightningDataModule):
         pass
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, shuffle = True, batch_size = BATCH_SIZE, collate_fn = collator, num_workers = NUM_WORKERS)
+        return DataLoader(self.train_dataset, batch_size = int(os.getenv("BATCH_SIZE")), collate_fn = collator, num_workers = NUM_WORKERS)
     
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size = BATCH_SIZE, collate_fn = collator, num_workers = NUM_WORKERS)
+        return DataLoader(self.val_dataset, batch_size = int(os.getenv("BATCH_SIZE")), collate_fn = collator, num_workers = NUM_WORKERS)
 
-if __name__ == "__main__":
+def main():
     label_index = {
-        "contradiction": 0,
+        "negative": 0,
         "neutral": 1,
-        "entailment": 2
+        "positive": 2
         }
-    model = Model(model_name = BASE_MODEL_NAME, label_index = label_index)
-    data = NLIData(model_name = BASE_MODEL_NAME, label_index = label_index)
+    model = Model(model_name = os.getenv("BASE_MODEL_NAME"), label_index = label_index)
+    data = Sentence(model_name = os.getenv("BASE_MODEL_NAME"), val_ratio = float(os.getenv("VAL_SIZE")), label_index = label_index)
     checkpoint_callback = ModelCheckpoint(monitor = 'val_loss')
+    
     wandblogger = WandbLogger(
         log_model = True,
         mode = "online",
-        project = "madral-aspect-labelling",
+        project = "intial-sentiment",
         config = {
-            "learning_rate": LEARNING_RATE,
-            "weight_decay": WEIGHT_DECAY,
-            "epochs": EPOCH,
-            "batch_size": BATCH_SIZE,
-            "block_size": block_size,
-            "base_model_name": BASE_MODEL_NAME,
-            "hub_model_name": HUB_MODEL_NAME,
-            "dataset_name": DATASET_NAME
+            "learning_rate": os.getenv("LEARNING_RATE"),
+            "weight_decay": 0.01,
+            "epochs": os.getenv("EPOCH"),
+            "batch_size": os.getenv("BATCH_SIZE"),
+            "block_size": 512,
+            "base_model_name": os.getenv("BASE_MODEL_NAME"),
+            "hub_model_name": os.getenv("HUB_MODEL_NAME"),
+            "dataset_name": os.getenv("ID_DATASET") +","+os.getenv("EN_DATASET")
             }
         )
-    wandblogger.experiment
-    trainer = Trainer(
-        accelerator = ACCELERATOR,
-        devices = "auto",
-        max_epochs = EPOCH,
-        callbacks =  [checkpoint_callback],
-        logger = wandblogger
-        )
-    trainer.fit(model, data)
-    wandb.finish()
     
-    local_rank = 0 if "lightning_logs" in os.listdir() else -1
-    if local_rank == 0:   
-        print("Saving model to hub: ")
-        model = Model.load_from_checkpoint(checkpoint_callback.best_model_path)
-        model.model.push_to_hub(HUB_MODEL_NAME, private = True)
-        data.tokenizer.push_to_hub(HUB_MODEL_NAME, private = True)
+    trainer = Trainer(accelerator = os.getenv("ACCELERATOR"), max_epochs = int(os.getenv("EPOCH")), callbacks =  [checkpoint_callback])
+    trainer.fit(model, data)
+    m = Model.load_from_checkpoint(checkpoint_callback.best_model_path)
+    m.model.push_to_hub(os.getenv("HUB_MODEL_NAME"))
+    data.tokenizer.push_to_hub(os.getenv("HUB_MODEL_NAME"))
+
+if __name__ == "__main__":
+    main()
