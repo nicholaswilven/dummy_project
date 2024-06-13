@@ -9,6 +9,7 @@ from lightning.pytorch.loggers import WandbLogger
 import torch
 import os
 import wandb
+from peft import get_peft_model, LoraConfig, TaskType, AutoPeftModelForCausalLM
 
 from huggingface_hub import login
 login(os.getenv("ACCESS_TOKEN"))
@@ -20,10 +21,12 @@ EPOCH = 3
 BATCH_SIZE = 8
 block_size = 256
 
-HUB_MODEL_NAME="thonyyy/qwen2-7b-translate-p2skip"
+HUB_MODEL_NAME="thonyyy/qwen2-7b-translate-p2"
 DATASET_NAME="thonyyy/tatoeba-nusax-mt-p2"
 ACCELERATOR="tpu"
 BASE_MODEL_NAME="Qwen/Qwen2-7B-Instruct"
+PEFT_MODEL_ID="thonyyy/qwen2-7b-translate-p1"
+
 NUM_WORKERS = 32
 
 def formatting_prompts_func(dataset, tokenizer):
@@ -63,23 +66,7 @@ class LargeLanguageModel(LightningModule):
         self.warmup_steps = warmup_steps
         self.loss_fn = nn.CrossEntropyLoss()
         
-        # Apply LoRA
-        self.apply_lora()
-
-    def apply_lora(self):
-        from peft import get_peft_model, LoraConfig, TaskType
-
-        lora_config = LoraConfig(
-            task_type=TaskType.CAUSAL_LM,
-            target_modules = ["q_proj", "k_proj", "v_proj", "o_proj","gate_proj", "up_proj", "down_proj",],
-            inference_mode=False,
-            r=32,
-            lora_alpha=16,
-            lora_dropout=0.1
-        )
-        self.model = get_peft_model(self.model, lora_config)
-        print("LoRA enabled")
-        self.model.print_trainable_parameters()
+        self.model.load_adapter(PEFT_MODEL_ID)
         
     def training_step(self, batch, batch_idx):
         outputs = self.model(**batch)
@@ -154,7 +141,7 @@ def main():
     wandblogger = WandbLogger(
         log_model = True,
         mode = "online",
-        project = "qwen-for-translation-1",
+        project = "qwen-for-translation-p2",
         config = {
             "learning_rate": LEARNING_RATE,
             "weight_decay": WEIGHT_DECAY,
@@ -163,7 +150,8 @@ def main():
             "block_size": block_size,
             "base_model_name": BASE_MODEL_NAME,
             "hub_model_name": HUB_MODEL_NAME,
-            "dataset_name": DATASET_NAME
+            "dataset_name": DATASET_NAME,
+            "peft_model_id": PEFT_MODEL_ID
             }
         )
     wandblogger.experiment

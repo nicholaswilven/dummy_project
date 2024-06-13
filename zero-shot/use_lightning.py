@@ -15,7 +15,7 @@ WEIGHT_DECAY=0.01
 LEARNING_RATE=1e-5
 EPOCH=2
 BATCH_SIZE=128
-
+VAL_SIZE=0.05
 block_size = 512
 HUB_MODEL_NAME="awidjaja/zero-shot-xlmR-food"
 DATASET_NAME="awidjaja/compiled_nli"
@@ -49,7 +49,7 @@ def tokenize(dataset, tokenizer):
         batch_tokenize,
         num_proc = NUM_WORKERS,
         batched = True,
-        remove_columns = ["task", "hypothesis", "premise"],
+        remove_columns = ["hypothesis", "premise"],
     )
 
 class Model(LightningModule):
@@ -108,8 +108,9 @@ class NLIData(LightningDataModule):
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         dataset = tokenize(dataset, self.tokenizer)
         dataset.set_format("torch", columns=["input_ids", "attention_mask", "labels"])
-        self.train_dataset = dataset['train']
-        self.val_dataset = concatenate_datasets([dataset['validation'],dataset['test']])
+        self.dataset = dataset.train_test_split(test_size=VAL_SIZE, seed = 42)
+        self.train_dataset = self.dataset['train'].shuffle(seed = 42)
+        self.val_dataset = self.dataset['test'].shuffle(seed = 42)
     
     def prepare_data(self):
         pass
