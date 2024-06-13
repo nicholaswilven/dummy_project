@@ -13,11 +13,11 @@ import wandb
 from huggingface_hub import login
 login(os.getenv("ACCESS_TOKEN"))
 
-WEIGHT_DECAY=0.001
-LEARNING_RATE=1e-5
-VAL_SIZE=0.05
-EPOCH=3
-BATCH_SIZE = 16
+WEIGHT_DECAY = 0.001
+LEARNING_RATE = 1e-5
+VAL_SIZE = 0.05
+EPOCH = 3
+BATCH_SIZE = 8
 block_size = 256
 
 HUB_MODEL_NAME="thonyyy/qwen2-7b-translate-p2skip"
