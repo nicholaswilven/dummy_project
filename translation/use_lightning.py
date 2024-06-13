@@ -142,7 +142,7 @@ def main():
         callbacks = [checkpoint_callback],
         logger=wandb_logger, 
         # accumulate_grad_batches = 32,
-        precision = '16-true'
+        precision = 'bf16'
     )
     trainer.fit(model, data)
     print("Best Model Checkpoint:", checkpoint_callback.best_model_path)
