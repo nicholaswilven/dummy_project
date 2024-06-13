@@ -133,7 +133,6 @@ if __name__ == "__main__":
     checkpoint_callback = ModelCheckpoint(monitor = 'val_loss')
     trainer = Trainer(
         accelerator = ACCELERATOR,
-        devices = 8,
         max_epochs = EPOCH,
         callbacks =  [checkpoint_callback],
         logger = pytorch.loggers.WandbLogger(
