@@ -20,7 +20,7 @@ EPOCH=3
 BATCH_SIZE = 16
 block_size = 256
 
-HUB_MODEL_NAME="thonyyy/qwen2-7b-instruct-translate-p1"
+HUB_MODEL_NAME="thonyyy/qwen2-7b-translate-p2skip"
 DATASET_NAME="thonyyy/tatoeba-nusax-mt-p2"
 ACCELERATOR="tpu"
 BASE_MODEL_NAME="Qwen/Qwen2-7B-Instruct"
@@ -48,7 +48,7 @@ def formatting_prompts_func(dataset, tokenizer):
 class LargeLanguageModel(LightningModule):
     def __init__(self, model_name: str = "", total_steps = 0, warmup_steps = 0, tokenizer = None):
         super().__init__()
-        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
         self.save_hyperparameters()
         self.total_steps = total_steps
         self.warmup_steps = warmup_steps
@@ -163,7 +163,7 @@ def main():
         max_epochs = EPOCH,
         callbacks =  [checkpoint_callback],
         logger = wandblogger,
-        precision = 'bf16'
+        precision = 'bf16-true'
     )
     trainer.fit(model, data)
     local_rank = 0 if "lightning_logs" in os.listdir() else -1
