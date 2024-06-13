@@ -164,12 +164,9 @@ def main():
         precision = 'bf16-true'
     )
     trainer.fit(model, data)
-    local_rank = 0 if "lightning_logs" in os.listdir() else -1
-    if local_rank == 0:   
-        print("Saving model to hub: ")
-        model = LargeLanguageModel.load_from_checkpoint(checkpoint_callback.best_model_path)
-        model.model.push_to_hub(HUB_MODEL_NAME, private = True)
-        data.tokenizer.push_to_hub(HUB_MODEL_NAME, private = True)
+    
+    model.model.push_to_hub(HUB_MODEL_NAME, private = True)
+    data.tokenizer.push_to_hub(HUB_MODEL_NAME, private = True)
         
     wandb.finish()
     
