@@ -1,15 +1,14 @@
 from lightning import LightningModule, LightningDataModule, Trainer
 from torch.optim.lr_scheduler import LambdaLR
 from datasets import load_dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, default_data_collator
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.utils.data import DataLoader, IterableDataset
 from torch import nn, optim
 from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.loggers import WandbLogger
 import torch
-from typing import List, Optional, Tuple, Union
 import os
-import torch_xla.core.xla_model as xm
-import gc
+import wandb
 
 from huggingface_hub import login
 login(os.getenv("ACCESS_TOKEN"))
@@ -17,55 +16,37 @@ login(os.getenv("ACCESS_TOKEN"))
 WEIGHT_DECAY=0.001
 LEARNING_RATE=1e-5
 VAL_SIZE=0.05
-EPOCH=1
-BATCH_SIZE=64
-
-block_size = 512
-HUB_MODEL_NAME="thonyyy/komodo-7b-translate-p1"
-DATASET_NAME="thonyyy/tatoeba-nusax-mt-p1-stream"
+EPOCH=3
+BATCH_SIZE = 16
+block_size = 256
+HUB_MODEL_NAME="thonyyy/qwen2-7b-translate-p2skip"
+DATASET_NAME="thonyyy/tatoeba-nusax-mt-p2"
 ACCELERATOR="tpu"
-BASE_MODEL_NAME="Yellow-AI-NLP/komodo-7b-base"
-NUM_WORKERS = 64
+BASE_MODEL_NAME="Qwen/Qwen2-7B-Instruct"
+NUM_WORKERS = 32
 MAX_TRAIN_BATCHES_PER_EPOCH = 192000000//(BATCH_SIZE*32) # 32 parallel process
-text_column_name = 'text'
 
 class StreamingIterableDataset(IterableDataset):
     def __init__(self, dataset, tokenizer):
         self.dataset = dataset
         self.tokenizer = tokenizer
-
+        self.EOS_TOKEN = self.tokenizer.eos_token
+        self.alpaca_prompt = "Below is an instruction that describes a task. Write a response that appropriately completes the request. \n\n### Instruction:\n{}\n\n### Response:\n{}"
+    
     def __iter__(self):
         for example in self.dataset:
             source_lang = example['source_lang']
             target_lang = example['target_lang']
-            source_text = self.tokenizer.decode(self.tokenizer(example['source_text'], add_special_tokens=False).input_ids[:(block_size-100)//2])
-            target_text = self.tokenizer.decode(self.tokenizer(example['target_text'], add_special_tokens=False).input_ids[:(block_size-100)//2])
-            prompt = f"""Di bawah ini adalah instruksi yang menjelaskan tugas, dipasangkan dengan masukan yang memberikan konteks lebih lanjut. Tulis respons yang secara tepat melengkapi permintaan.
-
-### Instruksi:
-Terjemahkan teks berikut dari bahasa {source_lang.replace('_',' ').title()} ke bahasa {target_lang.replace('_',' ').title()}.
-
-### Masukan:
-{source_text}
-
-### Respon:
-{target_text} </s>"""
-            outputs = self.tokenizer(
-                prompt,
-                max_length=block_size,
-                padding="max_length",
-                truncation=True
-            )
-            outputs['labels'] = outputs['input_ids'].copy()
-            yield {k: torch.tensor(v) for k, v in outputs.items()}
+            source_text = self.tokenizer.decode(self.tokenizer(example['source_text'], add_special_tokens=False).input_ids[:(block_size-80)//2])
+            target_text = self.tokenizer.decode(self.tokenizer(example['target_text'], add_special_tokens=False).input_ids[:(block_size-80)//2])
+            instruction = f"Translate the input text from {source_lang.replace('_',' ').title()} to {target_lang.replace('_',' ').title()}."
+            prompt = self.alpaca_prompt.format(instruction+'\n'+source_text.replace('\n',''), target_text.replace('\n','')) + self.EOS_TOKEN
+            yield {"text": prompt}
 
 class LargeLanguageModel(LightningModule):
     def __init__(self, model_name: str = "", total_steps = 0, warmup_steps = 0, tokenizer = None):
         super().__init__()
-        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16)
-        embedding_size = self.model.get_input_embeddings().weight.shape[0]
-        if len(tokenizer) > embedding_size:
-            self.model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=64)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
         self.save_hyperparameters()
         self.total_steps = total_steps
         self.warmup_steps = warmup_steps
@@ -79,8 +60,9 @@ class LargeLanguageModel(LightningModule):
 
         lora_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
+            target_modules = ["q_proj", "k_proj", "v_proj", "o_proj","gate_proj", "up_proj", "down_proj",],
             inference_mode=False,
-            r=16,
+            r=32,
             lora_alpha=32,
             lora_dropout=0.1
         )
@@ -99,15 +81,6 @@ class LargeLanguageModel(LightningModule):
         outputs = self.model(**batch)
         loss = outputs.loss
 
-        # Calculate accuracy
-        predictions = torch.argmax(outputs.logits, dim=-1)
-        labels = batch['labels']
-        mask = labels != -100
-        correct = (predictions[mask] == labels[mask]).sum().item()
-        total = mask.sum().item()
-        accuracy = correct / total if total > 0 else 0
-
-        self.log("val_accuracy", accuracy, on_epoch=True, on_step=True)
         self.log("val_loss", loss, on_epoch=True, on_step=True)
         return loss
 
@@ -138,10 +111,11 @@ class LargeDataModule(LightningDataModule):
     def __init__(self, model_name: str = ""):
         super().__init__()
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.tokenizer.add_special_tokens({'pad_token': '<pad>'})
         self.train_dataset = load_dataset(DATASET_NAME, split='train', streaming=True)
         self.val_dataset = load_dataset(DATASET_NAME, split='validation', streaming=True)
-        self.data_collator = default_data_collator
+        from trl import DataCollatorForCompletionOnlyLM
+        response_template = "### Response:\n"
+        self.data_collator = DataCollatorForCompletionOnlyLM(response_template, tokenizer=self.tokenizer)
     
     def prepare_data(self):
         pass
@@ -150,6 +124,8 @@ class LargeDataModule(LightningDataModule):
         pass
 
     def train_dataloader(self):
+        seed, buffer_size = 42, 10_000
+        self.train_dataset = self.train_dataset.shuffle(seed, buffer_size=buffer_size)
         train_dataset = StreamingIterableDataset(self.train_dataset, self.tokenizer)
         return DataLoader(train_dataset, batch_size=BATCH_SIZE, collate_fn=self.data_collator, num_workers=NUM_WORKERS)
     
@@ -165,16 +141,39 @@ def main():
     checkpoint_callback = ModelCheckpoint(
         monitor='val_loss',
     )
+    wandblogger = WandbLogger(
+        log_model = True,
+        mode = "online",
+        project = "qwen-for-translation-1",
+        config = {
+            "learning_rate": LEARNING_RATE,
+            "weight_decay": WEIGHT_DECAY,
+            "epochs": EPOCH,
+            "batch_size": BATCH_SIZE,
+            "block_size": block_size,
+            "base_model_name": BASE_MODEL_NAME,
+            "hub_model_name": HUB_MODEL_NAME,
+            "dataset_name": DATASET_NAME
+            }
+        )
+    wandblogger.experiment
     trainer = Trainer(
-        accelerator=ACCELERATOR,
-        max_epochs=EPOCH,
-        callbacks=[checkpoint_callback],
-        precision='16-true'
+        accelerator = ACCELERATOR,
+        devices = "auto",
+        max_steps = TOTAL_STEPS,
+        callbacks =  [checkpoint_callback],
+        logger = wandblogger,
+        precision = 'bf16-true'
     )
     trainer.fit(model, data)
-    print("Best Model Checkpoint:", checkpoint_callback.best_model_path)
-    model.model.push_to_hub(HUB_MODEL_NAME, use_auth_token=os.getenv("ACCESS_TOKEN"), private=True)
-    data.tokenizer.push_to_hub(HUB_MODEL_NAME, use_auth_token=os.getenv("ACCESS_TOKEN"), private=True)
+    local_rank = 0 if "lightning_logs" in os.listdir() else -1
+    if local_rank == 0:   
+        print("Saving model to hub: ")
+        model = LargeLanguageModel.load_from_checkpoint(checkpoint_callback.best_model_path)
+        model.model.push_to_hub(HUB_MODEL_NAME, private = True)
+        data.tokenizer.push_to_hub(HUB_MODEL_NAME, private = True)
+        
+    wandb.finish()
 
 if __name__ == "__main__":
     main()
