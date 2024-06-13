@@ -123,10 +123,11 @@ class LargeDataModule(LightningDataModule):
         super().__init__()
         dataset = load_dataset(DATASET_NAME)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.dataset = formatting_prompts_func(dataset, self.tokenizer)
         self.dataset = self.dataset['train'].train_test_split(test_size=VAL_SIZE, seed = 42)
         self.train_dataset = self.dataset['train'].shuffle(seed = 42)
         self.val_dataset = self.dataset['test'].shuffle(seed = 42)
+        self.train_dataset = formatting_prompts_func(self.train_dataset, self.tokenizer)
+        self.val_dataset = formatting_prompts_func(self.val_dataset, self.tokenizer)
         from trl import DataCollatorForCompletionOnlyLM
         response_template = "### Response:\n"
         self.data_collator = DataCollatorForCompletionOnlyLM(response_template, tokenizer=self.tokenizer)
