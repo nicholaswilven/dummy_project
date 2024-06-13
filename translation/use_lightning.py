@@ -123,7 +123,7 @@ class LargeDataModule(LightningDataModule):
         super().__init__()
         dataset = load_dataset(DATASET_NAME)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.dataset = self.dataset['train'].train_test_split(test_size=VAL_SIZE, seed = 42)
+        self.dataset = dataset['train'].train_test_split(test_size=VAL_SIZE, seed = 42)
         self.train_dataset = self.dataset['train'].shuffle(seed = 42)
         self.val_dataset = self.dataset['test'].shuffle(seed = 42)
         self.train_dataset = formatting_prompts_func(self.train_dataset, self.tokenizer)
