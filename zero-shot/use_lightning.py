@@ -136,7 +136,7 @@ if __name__ == "__main__":
         max_epochs = EPOCH,
         callbacks =  [checkpoint_callback],
         logger = pytorch.loggers.WandbLogger(
-            log_model = "all",
+            log_model = True,
             mode = "online",
             project = "madral-recommendation",
             config = {
