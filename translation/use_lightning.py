@@ -18,58 +18,33 @@ WEIGHT_DECAY=0.001
 LEARNING_RATE=4e-4
 VAL_SIZE=0.05
 EPOCH=1
-BATCH_SIZE=64
+BATCH_SIZE=16
 
 block_size = 512
-HUB_MODEL_NAME="thonyyy/komodo-7b-translate-p1"
+HUB_MODEL_NAME="thonyyy/qwen2-7b-instruct-translate-p1"
 DATASET_NAME="thonyyy/tatoeba-nusax-mt-p2"
 ACCELERATOR="tpu"
-BASE_MODEL_NAME="Yellow-AI-NLP/komodo-7b-base"
-NUM_WORKERS = 64
-text_column_name = 'text'
+BASE_MODEL_NAME="Qwen/Qwen2-7B-Instruct"
+NUM_WORKERS = 32
 
-def tokenize(dataset, tokenizer):
-    def prompting_template_and_tokenize(examples):
-        # Concatenate all texts.
-        # columns : ['source_lang','target_lang','source_text','target_text']
-        prompt_list = []
-        for source_lang, target_lang, source_text, target_text in zip(examples['source_lang'],examples['target_lang'],examples['source_text'],examples['target_text']):
-            source_text = tokenizer.decode(tokenizer(source_text, add_special_tokens = False).input_ids[:(block_size-100)//2])
-            target_text = tokenizer.decode(tokenizer(target_text, add_special_tokens = False).input_ids[:(block_size-100)//2])
-            prompt = f"""Di bawah ini adalah instruksi yang menjelaskan tugas, dipasangkan dengan masukan yang memberikan konteks lebih lanjut. Tulis respons yang secara tepat melengkapi permintaan.
-
-### Instruksi:
-Terjemahkan teks berikut dari bahasa {source_lang.replace('_',' ').title()} ke bahasa {target_lang.replace('_',' ').title()}.
-
-### Masukan:
-{source_text}
-
-### Respon:
-{target_text} </s>"""
-            prompt_list.append(prompt)
-        outputs = tokenizer(
-            prompt_list,
-            max_length=block_size,
-            padding="max_length",
-            truncation=True
-        ) 
-        
-        outputs['labels'] = [x.copy() for x in outputs['input_ids']]
-        return outputs
-    return dataset.map(
-        prompting_template_and_tokenize,
-        num_proc=NUM_WORKERS,
-        batched=True,
-        # remove_columns=["text"],
-    )
+def formatting_prompts_func(examples, tokenizer):
+    EOS_TOKEN = tokenizer.eos_token # Must add EOS_TOKEN
+    alpaca_prompt = "Below is an instruction that describes a task. Write a response that appropriately completes the request. \n\n### Instruction:\n{}\n\n### Response:\n{}"
+    # Concatenate all texts.
+    # columns : ['source_lang','target_lang','source_text','target_text']
+    prompt_list = []
+    for source_lang, target_lang, source_text, target_text in zip(examples['source_lang'],examples['target_lang'],examples['source_text'],examples['target_text']):
+        source_text = tokenizer.decode(tokenizer(source_text, add_special_tokens = False).input_ids[:(block_size-80)//2])
+        target_text = tokenizer.decode(tokenizer(target_text, add_special_tokens = False).input_ids[:(block_size-80)//2])
+        instruction = f"Translate the input text from {source_lang.replace('_',' ').title()} to {target_lang.replace('_',' ').title()}."
+        prompt = alpaca_prompt.format(instruction+'\n'+source_text.replace('\n',''), target_text.replace('\n','')) + EOS_TOKEN
+        prompt_list.append(prompt)
+    return {"text": prompt_list}
 
 class LargeLanguageModel(LightningModule):
     def __init__(self, model_name: str = "", total_steps = 0, warmup_steps = 0, tokenizer = None):
         super().__init__()
         self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16)
-        embedding_size = self.model.get_input_embeddings().weight.shape[0]
-        if len(tokenizer) > embedding_size:
-            self.model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of = 64)
         self.save_hyperparameters()
         self.total_steps = total_steps
         self.warmup_steps = warmup_steps
@@ -103,15 +78,6 @@ class LargeLanguageModel(LightningModule):
         outputs = self.model(**batch)
         loss = outputs.loss
 
-        # Calculate accuracy
-        predictions = torch.argmax(outputs.logits, dim=-1)
-        labels = batch['labels']
-        mask = labels != -100
-        correct = (predictions[mask] == labels[mask]).sum().item()
-        total = mask.sum().item()
-        accuracy = correct / total if total > 0 else 0
-
-        self.log("val_accuracy", accuracy, on_epoch=True, on_step=True)
         self.log("val_loss", loss, on_epoch=True, on_step=True)
         return loss
 
@@ -141,15 +107,15 @@ class LargeLanguageModel(LightningModule):
 class LargeDataModule(LightningDataModule):
     def __init__(self, model_name: str = ""):
         super().__init__()
-        concat_ds = load_dataset(DATASET_NAME)
+        dataset = load_dataset(DATASET_NAME)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.tokenizer.add_special_tokens({'pad_token': '<pad>'})
-        self.dataset = tokenize(concat_ds, self.tokenizer)
-        self.dataset.set_format("torch", columns = ["input_ids", "attention_mask", "labels"])
+        self.dataset = formatting_prompts_func(dataset, self.tokenizer)
         self.dataset = self.dataset['train'].train_test_split(test_size=VAL_SIZE, seed = 42)
         self.train_dataset = self.dataset['train'].shuffle(seed = 42)
         self.val_dataset = self.dataset['test'].shuffle(seed = 42)
-        self.data_collator = default_data_collator
+        from trl import DataCollatorForCompletionOnlyLM
+        response_template = "### Response:\n"
+        self.data_collator = DataCollatorForCompletionOnlyLM(response_template, tokenizer=self.tokenizer)
     def prepare_data(self):
         pass
 
