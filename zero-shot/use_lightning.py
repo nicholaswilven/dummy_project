@@ -12,13 +12,13 @@ from huggingface_hub import login
 login(os.getenv("ACCESS_TOKEN"))
 
 WEIGHT_DECAY=0.01
-LEARNING_RATE=5e-6
+LEARNING_RATE=1e-5
 EPOCH=2
-BATCH_SIZE=64
+BATCH_SIZE=128
 
 block_size = 512
 HUB_MODEL_NAME="awidjaja/zero-shot-xlmR-food"
-DATASET_NAME="tasksource/zero-shot-label-nli"
+DATASET_NAME="awidjaja/compiled_nli"
 ACCELERATOR="tpu"
 BASE_MODEL_NAME="awidjaja/pretrained-xlmR-food"
 NUM_WORKERS = 64
@@ -135,7 +135,7 @@ if __name__ == "__main__":
     wandblogger = WandbLogger(
         log_model = True,
         mode = "online",
-        project = "madral-recommendation",
+        project = "madral-aspect-labelling",
         config = {
             "learning_rate": LEARNING_RATE,
             "weight_decay": WEIGHT_DECAY,
