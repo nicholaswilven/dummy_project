@@ -25,7 +25,7 @@ DATASET_NAME="thonyyy/tatoeba-nusax-mt-p1-stream"
 ACCELERATOR="tpu"
 BASE_MODEL_NAME="Qwen/Qwen2-7B-Instruct"
 NUM_WORKERS = 32
-MAX_TRAIN_BATCHES_PER_EPOCH = 192000000//(BATCH_SIZE*num_chips) # 32 parallel process
+MAX_TRAIN_BATCHES_PER_EPOCH = 1000 # 192000000//(BATCH_SIZE*num_chips) # 32 parallel process
 
 effective_batch_size = 2048
 gradient_acummulation_steps = effective_batch_size // (num_chips*BATCH_SIZE)
