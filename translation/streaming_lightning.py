@@ -9,6 +9,14 @@ import torch
 import os
 import wandb
 
+from pytorch_lightning.callbacks.base import Callback
+from pytorch_lightning.utilities import rank_zero_info
+
+class RunValidationAtEndCallback(Callback):
+    def on_train_end(self, trainer, pl_module):
+        rank_zero_info("Running validation on entire validation dataset at the end of training.")
+        trainer.run_evaluation()
+        
 from huggingface_hub import login
 login(os.getenv("ACCESS_TOKEN"))
 
@@ -17,18 +25,18 @@ num_chips = int(os.getenv("NUM_CHIPS","32"))
 WEIGHT_DECAY = 0.001
 LEARNING_RATE = 1e-5
 VAL_SIZE = 0.05
-EPOCH = 2
 BATCH_SIZE = 8
 block_size = 256
-HUB_MODEL_NAME="thonyyy/qwen2-7b-translate-p1"
-DATASET_NAME="thonyyy/tatoeba-nusax-mt-p1-stream"
+HUB_MODEL_NAME="thonyyy/nusa-qwen2-7b-translate"
+DATASET_NAME="thonyyy/tatoeba-nusax-scrape-mt-concat"
 ACCELERATOR="tpu"
 BASE_MODEL_NAME="Qwen/Qwen2-7B-Instruct"
 NUM_WORKERS = 32
-MAX_TRAIN_BATCHES_PER_EPOCH = 1000 # 192000000//(BATCH_SIZE*num_chips) # 32 parallel process
 
 effective_batch_size = 2048
 gradient_acummulation_steps = effective_batch_size // (num_chips*BATCH_SIZE)
+
+MAX_TRAIN_STEPS = 100 # 194157658 // effective_batch_size
 
 class StreamingIterableDataset(IterableDataset):
     def __init__(self, dataset, tokenizer):
@@ -39,8 +47,8 @@ class StreamingIterableDataset(IterableDataset):
         for example in self.dataset:
             source_lang = example['source_lang']
             target_lang = example['target_lang']
-            source_text = self.tokenizer.decode(self.tokenizer(example['source_text'], add_special_tokens=False).input_ids[:(block_size-80)//2])
-            target_text = self.tokenizer.decode(self.tokenizer(example['target_text'], add_special_tokens=False).input_ids[:(block_size-80)//2])
+            source_text = self.tokenizer.decode(self.tokenizer(example['source_text'], add_special_tokens=False).input_ids[:(block_size-30)//2])
+            target_text = self.tokenizer.decode(self.tokenizer(example['target_text'], add_special_tokens=False).input_ids[:(block_size-30)//2])
             messages = [
                 {"role": "system", "content": "You are a professional translator capable of translating English, Indonesian, and Indonesian Regional Languages"},
                 {"role": "user", "content": f"""Translate this text from {source_lang} into {target_lang}:\n{source_text}"""},
@@ -80,7 +88,7 @@ class LargeLanguageModel(LightningModule):
             target_modules = ["q_proj", "k_proj", "v_proj", "o_proj","gate_proj", "up_proj", "down_proj",],
             inference_mode=False,
             r=32,
-            lora_alpha=16,
+            lora_alpha=32,
             lora_dropout=0.1
         )
         self.model = get_peft_model(self.model, lora_config)
@@ -141,45 +149,46 @@ class LargeDataModule(LightningDataModule):
         pass
 
     def train_dataloader(self):
-        seed, buffer_size = 42, 100_000
+        seed, buffer_size = 42, 1000000
         self.train_dataset = self.train_dataset.shuffle(seed, buffer_size=buffer_size)
         train_dataset = StreamingIterableDataset(self.train_dataset, self.tokenizer)
-        return DataLoader(train_dataset, batch_size=BATCH_SIZE, collate_fn=self.data_collator)
+        return DataLoader(train_dataset, batch_size=BATCH_SIZE, collate_fn=self.data_collator, drop_last=True)
     
     def val_dataloader(self):
         val_dataset = StreamingIterableDataset(self.val_dataset, self.tokenizer)
-        return DataLoader(val_dataset, batch_size=BATCH_SIZE, collate_fn=self.data_collator)
+        return DataLoader(val_dataset, batch_size=BATCH_SIZE, collate_fn=self.data_collator, drop_last=True)
 
 def main():
     data = LargeDataModule(model_name=BASE_MODEL_NAME)
-    TOTAL_STEPS = MAX_TRAIN_BATCHES_PER_EPOCH * EPOCH
-    WARMUP_STEPS = int(0.1 * TOTAL_STEPS)
-    model = LargeLanguageModel(model_name=BASE_MODEL_NAME, total_steps=TOTAL_STEPS, warmup_steps=WARMUP_STEPS, tokenizer=data.tokenizer)
+    WARMUP_STEPS = int(0.1 * MAX_TRAIN_STEPS)
+    model = LargeLanguageModel(model_name=BASE_MODEL_NAME, total_steps=MAX_TRAIN_STEPS, warmup_steps=WARMUP_STEPS, tokenizer=data.tokenizer)
     wandblogger = WandbLogger(
-        log_model = True,
+        log_model = False,  # Disable logging model checkpoints
         mode = "online",
         project = "qwen2-for-translation-p1",
         config = {
             "learning_rate": LEARNING_RATE,
             "weight_decay": WEIGHT_DECAY,
-            "epochs": EPOCH,
             "batch_size": BATCH_SIZE,
             "block_size": block_size,
             "base_model_name": BASE_MODEL_NAME,
             "hub_model_name": HUB_MODEL_NAME,
-            "dataset_name": DATASET_NAME
+            "dataset_name": DATASET_NAME,
+            "total_steps" : MAX_TRAIN_STEPS
             }
         )
     wandblogger.experiment
     trainer = Trainer(
         accelerator = ACCELERATOR,
         devices = "auto",
-        max_steps = TOTAL_STEPS,
+        max_steps = MAX_TRAIN_STEPS,
         logger = wandblogger,
         precision = 'bf16-true',
-        accumulate_grad_batches = gradient_acummulation_steps
+        accumulate_grad_batches = gradient_acummulation_steps,
+        callbacks=[RunValidationAtEndCallback()]
     )
     trainer.fit(model, data)
+    trainer.validate(model, data)
     model.model.push_to_hub(HUB_MODEL_NAME, private = True)
     data.tokenizer.push_to_hub(HUB_MODEL_NAME, private = True)
         
