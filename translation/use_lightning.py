@@ -12,6 +12,8 @@ import wandb
 from huggingface_hub import login
 login(os.getenv("ACCESS_TOKEN"))
 
+num_chips = int(os.getenv("NUM_CHIPS","16"))
+
 WEIGHT_DECAY = 0.001
 LEARNING_RATE = 1e-5
 VAL_SIZE = 0.05
@@ -25,19 +27,26 @@ ACCELERATOR="tpu"
 BASE_MODEL_NAME="Qwen/Qwen2-7B-Instruct"
 NUM_WORKERS = 32
 
+effective_batch_size = 2048
+gradient_acummulation_steps = effective_batch_size // (num_chips*BATCH_SIZE)
+
 def formatting_prompts_func(dataset, tokenizer):
-    EOS_TOKEN = tokenizer.eos_token # Must add EOS_TOKEN
-    alpaca_prompt = "Below is an instruction that describes a task. Write a response that appropriately completes the request. \n\n### Instruction:\n{}\n\n### Response:\n{}"
-    # Concatenate all texts.
-    # columns : ['source_lang','target_lang','source_text','target_text']
     def _map_func(examples):
         prompt_list = []
         for source_lang, target_lang, source_text, target_text in zip(examples['source_lang'],examples['target_lang'],examples['source_text'],examples['target_text']):
             source_text = tokenizer.decode(tokenizer(source_text, add_special_tokens = False).input_ids[:(block_size-80)//2])
             target_text = tokenizer.decode(tokenizer(target_text, add_special_tokens = False).input_ids[:(block_size-80)//2])
-            instruction = f"Translate the input text from {source_lang.replace('_',' ').title()} to {target_lang.replace('_',' ').title()}."
-            prompt = alpaca_prompt.format(instruction+'\n'+source_text.replace('\n',''), target_text.replace('\n','')) + EOS_TOKEN
-            prompt_list.append(prompt)
+            messages = [
+                {"role": "system", "content": "You are a professional translator capable of translating English, Indonesian, and Indonesian Regional Languages"},
+                {"role": "user", "content": f"""Translate this text from {source_lang} into {target_lang}:\n{source_text}"""},
+                {"role": "assistant", "content": target_text},
+            ]
+            text = tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=False
+            )
+            prompt_list.append(text)
         outputs = tokenizer(
             prompt_list,
             max_length = block_size,
@@ -121,14 +130,14 @@ class LargeDataModule(LightningDataModule):
     def __init__(self, model_name: str = ""):
         super().__init__()
         dataset = load_dataset(DATASET_NAME)
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, padding_size='left')
         self.dataset = dataset['train'].train_test_split(test_size=VAL_SIZE, seed = 42)
         self.train_dataset = self.dataset['train'].shuffle(seed = 42)
         self.val_dataset = self.dataset['test'].shuffle(seed = 42)
         self.train_dataset = formatting_prompts_func(self.train_dataset, self.tokenizer)
         self.val_dataset = formatting_prompts_func(self.val_dataset, self.tokenizer)
         from trl import DataCollatorForCompletionOnlyLM
-        response_template = "### Response:\n"
+        response_template = "<|im_start|>assistant\n"
         self.data_collator = DataCollatorForCompletionOnlyLM(response_template, tokenizer=self.tokenizer)
     def prepare_data(self):
         pass
@@ -168,7 +177,8 @@ def main():
         devices = "auto",
         max_epochs = EPOCH,
         logger = wandblogger,
-        precision = 'bf16-true'
+        precision = 'bf16-true',
+        gradient_acummulation_steps = gradient_acummulation_steps
     )
     trainer.fit(model, data)
     model.model.push_to_hub(HUB_MODEL_NAME, private = True)

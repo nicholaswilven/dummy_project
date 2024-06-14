@@ -12,10 +12,12 @@ import wandb
 from huggingface_hub import login
 login(os.getenv("ACCESS_TOKEN"))
 
-WEIGHT_DECAY=0.001
-LEARNING_RATE=1e-5
-VAL_SIZE=0.05
-EPOCH=2
+num_chips = int(os.getenv("NUM_CHIPS","32"))
+
+WEIGHT_DECAY = 0.001
+LEARNING_RATE = 1e-5
+VAL_SIZE = 0.05
+EPOCH = 2
 BATCH_SIZE = 8
 block_size = 256
 HUB_MODEL_NAME="thonyyy/qwen2-7b-translate-p1"
@@ -23,14 +25,15 @@ DATASET_NAME="thonyyy/tatoeba-nusax-mt-p1-stream"
 ACCELERATOR="tpu"
 BASE_MODEL_NAME="Qwen/Qwen2-7B-Instruct"
 NUM_WORKERS = 32
-MAX_TRAIN_BATCHES_PER_EPOCH = 192000000//(BATCH_SIZE*32) # 32 parallel process
+MAX_TRAIN_BATCHES_PER_EPOCH = 192000000//(BATCH_SIZE*num_chips) # 32 parallel process
+
+effective_batch_size = 2048
+gradient_acummulation_steps = effective_batch_size // (num_chips*BATCH_SIZE)
 
 class StreamingIterableDataset(IterableDataset):
     def __init__(self, dataset, tokenizer):
         self.dataset = dataset
         self.tokenizer = tokenizer
-        self.EOS_TOKEN = self.tokenizer.eos_token
-        self.alpaca_prompt = "Below is an instruction that describes a task. Write a response that appropriately completes the request. \n\n### Instruction:\n{}\n\n### Response:\n{}"
     
     def __iter__(self):
         for example in self.dataset:
@@ -38,11 +41,18 @@ class StreamingIterableDataset(IterableDataset):
             target_lang = example['target_lang']
             source_text = self.tokenizer.decode(self.tokenizer(example['source_text'], add_special_tokens=False).input_ids[:(block_size-80)//2])
             target_text = self.tokenizer.decode(self.tokenizer(example['target_text'], add_special_tokens=False).input_ids[:(block_size-80)//2])
-            instruction = f"Translate the input text from {source_lang.replace('_',' ').title()} to {target_lang.replace('_',' ').title()}."
-            prompt = self.alpaca_prompt.format(instruction+'\n'+source_text.replace('\n',''), target_text.replace('\n','')) + self.EOS_TOKEN
-            
+            messages = [
+                {"role": "system", "content": "You are a professional translator capable of translating English, Indonesian, and Indonesian Regional Languages"},
+                {"role": "user", "content": f"""Translate this text from {source_lang} into {target_lang}:\n{source_text}"""},
+                {"role": "assistant", "content": target_text},
+            ]
+            text = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=False
+            )
             outputs = self.tokenizer(
-                prompt,
+                text,
                 max_length = block_size,
                 padding = "max_length",
                 truncation = True,
@@ -117,11 +127,11 @@ class LargeLanguageModel(LightningModule):
 class LargeDataModule(LightningDataModule):
     def __init__(self, model_name: str = ""):
         super().__init__()
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, padding_size='left')
         self.train_dataset = load_dataset(DATASET_NAME, split='train', streaming=True)
         self.val_dataset = load_dataset(DATASET_NAME, split='validation', streaming=True)
         from trl import DataCollatorForCompletionOnlyLM
-        response_template = "### Response:\n"
+        response_template = "<|im_start|>assistant\n"
         self.data_collator = DataCollatorForCompletionOnlyLM(response_template, tokenizer=self.tokenizer)
     
     def prepare_data(self):
@@ -131,7 +141,7 @@ class LargeDataModule(LightningDataModule):
         pass
 
     def train_dataloader(self):
-        seed, buffer_size = 42, 10_000
+        seed, buffer_size = 42, 100_000
         self.train_dataset = self.train_dataset.shuffle(seed, buffer_size=buffer_size)
         train_dataset = StreamingIterableDataset(self.train_dataset, self.tokenizer)
         return DataLoader(train_dataset, batch_size=BATCH_SIZE, collate_fn=self.data_collator)
@@ -166,7 +176,8 @@ def main():
         devices = "auto",
         max_steps = TOTAL_STEPS,
         logger = wandblogger,
-        precision = 'bf16-true'
+        precision = 'bf16-true',
+        gradient_acummulation_steps = gradient_acummulation_steps
     )
     trainer.fit(model, data)
     model.model.push_to_hub(HUB_MODEL_NAME, private = True)

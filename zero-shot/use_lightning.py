@@ -127,9 +127,9 @@ class NLIData(LightningDataModule):
 
 if __name__ == "__main__":
     label_index = {
-        "contradiction": 0,
+        "entailment": 0,
         "neutral": 1,
-        "entailment": 2
+        "contradiction": 2
         }
     model = Model(model_name = BASE_MODEL_NAME, label_index = label_index)
     data = NLIData(model_name = BASE_MODEL_NAME, label_index = label_index)
