@@ -174,10 +174,11 @@ def main():
         accelerator = ACCELERATOR,
         devices = "auto",
         max_steps = MAX_TRAIN_STEPS,
-        limit_val_batches = 1000,
+        limit_val_batches = 10,
         logger = wandblogger,
         precision = 'bf16-true',
-        accumulate_grad_batches = gradient_acummulation_steps
+        accumulate_grad_batches = gradient_acummulation_steps,
+        enable_checkpointing=False
     )
     trainer.fit(model, data)
     trainer.validate(model, data)
