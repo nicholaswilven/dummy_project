@@ -9,14 +9,6 @@ import torch
 import os
 import wandb
 
-from pytorch_lightning.callbacks.base import Callback
-from pytorch_lightning.utilities import rank_zero_info
-
-class RunValidationAtEndCallback(Callback):
-    def on_train_end(self, trainer, pl_module):
-        rank_zero_info("Running validation on entire validation dataset at the end of training.")
-        trainer.run_evaluation()
-        
 from huggingface_hub import login
 login(os.getenv("ACCESS_TOKEN"))
 
@@ -184,8 +176,7 @@ def main():
         max_steps = MAX_TRAIN_STEPS,
         logger = wandblogger,
         precision = 'bf16-true',
-        accumulate_grad_batches = gradient_acummulation_steps,
-        callbacks=[RunValidationAtEndCallback()]
+        accumulate_grad_batches = gradient_acummulation_steps
     )
     trainer.fit(model, data)
     trainer.validate(model, data)
