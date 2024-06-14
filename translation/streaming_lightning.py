@@ -28,7 +28,7 @@ NUM_WORKERS = 32
 effective_batch_size = 2048
 gradient_acummulation_steps = effective_batch_size // (num_chips*BATCH_SIZE)
 
-MAX_TRAIN_STEPS = 100 # 194157658 // effective_batch_size
+MAX_TRAIN_STEPS = 10 # 194157658 // effective_batch_size
 
 class StreamingIterableDataset(IterableDataset):
     def __init__(self, dataset, tokenizer):
@@ -157,7 +157,7 @@ def main():
     wandblogger = WandbLogger(
         log_model = False,  # Disable logging model checkpoints
         mode = "online",
-        project = "qwen2-for-translation-p1",
+        project = "nusa-qwen2-for-translation",
         config = {
             "learning_rate": LEARNING_RATE,
             "weight_decay": WEIGHT_DECAY,
