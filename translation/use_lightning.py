@@ -46,7 +46,7 @@ def formatting_prompts_func(dataset, tokenizer):
                 tokenize=False,
                 add_generation_prompt=False
             )
-            prompt_list.append(text)
+            prompt_list.append(text[:-2])
         outputs = tokenizer(
             prompt_list,
             max_length = block_size,

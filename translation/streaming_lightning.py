@@ -52,7 +52,7 @@ class StreamingIterableDataset(IterableDataset):
             add_generation_prompt=False
             )
             outputs = self.tokenizer(
-                text,
+                [text[:-2]],
                 max_length = block_size,
                 padding = "max_length",
                 truncation = True,
