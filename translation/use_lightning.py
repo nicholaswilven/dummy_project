@@ -178,7 +178,7 @@ def main():
         max_epochs = EPOCH,
         logger = wandblogger,
         precision = 'bf16-true',
-        gradient_acummulation_steps = gradient_acummulation_steps
+        accumulate_grad_batches = gradient_acummulation_steps
     )
     trainer.fit(model, data)
     model.model.push_to_hub(HUB_MODEL_NAME, private = True)
