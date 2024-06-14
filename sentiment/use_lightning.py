@@ -174,7 +174,7 @@ def main():
             "dataset_name": ID_DATASET +","+EN_DATASET
             }
         )
-    
+    wandblogger.experiment
     trainer = Trainer(
         accelerator = ACCELERATOR,
         max_epochs = EPOCH,

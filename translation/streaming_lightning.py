@@ -48,7 +48,7 @@ class StreamingIterableDataset(IterableDataset):
                 truncation = True,
                 return_tensors = "pt",
             )
-            yield outputs
+            yield {key: val.squeeze() for key, val in outputs.items()}
 
 class LargeLanguageModel(LightningModule):
     def __init__(self, model_name: str = "", total_steps = 0, warmup_steps = 0, tokenizer = None):
@@ -134,11 +134,11 @@ class LargeDataModule(LightningDataModule):
         seed, buffer_size = 42, 10_000
         self.train_dataset = self.train_dataset.shuffle(seed, buffer_size=buffer_size)
         train_dataset = StreamingIterableDataset(self.train_dataset, self.tokenizer)
-        return DataLoader(train_dataset, batch_size=BATCH_SIZE, collate_fn=self.data_collator, num_workers=NUM_WORKERS)
+        return DataLoader(train_dataset, batch_size=BATCH_SIZE, collate_fn=self.data_collator)
     
     def val_dataloader(self):
         val_dataset = StreamingIterableDataset(self.val_dataset, self.tokenizer)
-        return DataLoader(val_dataset, batch_size=BATCH_SIZE, collate_fn=self.data_collator, num_workers=NUM_WORKERS)
+        return DataLoader(val_dataset, batch_size=BATCH_SIZE, collate_fn=self.data_collator)
 
 def main():
     data = LargeDataModule(model_name=BASE_MODEL_NAME)
