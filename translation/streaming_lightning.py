@@ -37,8 +37,8 @@ class StreamingIterableDataset(IterableDataset):
     
     def __iter__(self):
         for example in self.dataset:
-            source_lang = example['source_lang']
-            target_lang = example['target_lang']
+            source_lang = example['source_lang'].replace("_"," ").title()
+            target_lang = example['target_lang'].replace("_"," ").title()
             source_text = self.tokenizer.decode(self.tokenizer(example['source_text'], add_special_tokens=False).input_ids[:(block_size-30)//2])
             target_text = self.tokenizer.decode(self.tokenizer(example['target_text'], add_special_tokens=False).input_ids[:(block_size-30)//2])
             messages = [
