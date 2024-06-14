@@ -28,7 +28,7 @@ NUM_WORKERS = 32
 effective_batch_size = 2048
 gradient_acummulation_steps = effective_batch_size // (num_chips*BATCH_SIZE)
 
-MAX_TRAIN_STEPS = 10 # 194157658 // effective_batch_size
+MAX_TRAIN_STEPS = 194157658 // effective_batch_size
 
 class StreamingIterableDataset(IterableDataset):
     def __init__(self, dataset, tokenizer):
@@ -174,7 +174,7 @@ def main():
         accelerator = ACCELERATOR,
         devices = "auto",
         max_steps = MAX_TRAIN_STEPS,
-        limit_val_batches = 10,
+        limit_val_batches = 2000,
         logger = wandblogger,
         precision = 'bf16-true',
         accumulate_grad_batches = gradient_acummulation_steps,
